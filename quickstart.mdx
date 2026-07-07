@@ -104,11 +104,13 @@ Key points about this setup:
 - **`Router {url}`** — the `url` prop is only used during SSR. In the browser it is an empty string and is safely ignored. See the note below for details.
 - **`Link to="..."`** — renders an `<a>` tag that updates the URL without a full page reload. The active link automatically receives `aria-current="page"`.
 - **`Route path="/blog/:id"`** — the `:id` segment is extracted and passed as the `id` prop to `BlogPost`.
-- **`Route path="/"`** — the default catch-all renders its children directly instead of a separate component.
+- **`Route path="/"`** — matches exactly the root path `/` and renders its children directly instead of a separate `component` prop. A `Route` with no `path` prop (or `path=""`) acts as the true default fallback that matches when no other `Route` in the `Router` does.
 
 ### Mount your app in main.ts
 
 Svelte 5 replaces the old `new App()` constructor with the `mount()` function. Update your entry point accordingly:
+
+<CodeGroup>
 
 ```typescript src/main.ts
 import { mount } from "svelte";
@@ -131,6 +133,8 @@ const app = mount(App, {
 
 export default app;
 ```
+
+</CodeGroup>
 
 <Note>
   Svelte 5 no longer supports `new App({ target })`. If you are migrating from Svelte 4, you **must** replace the constructor call with `mount()`. The `mount()` function is imported directly from `"svelte"`, not from your app file.

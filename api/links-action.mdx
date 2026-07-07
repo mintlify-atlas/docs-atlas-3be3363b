@@ -34,7 +34,7 @@ Each individual `<a>` element inside the container can carry these attributes to
 
 The action attaches a single `click` listener to the container. On each click it:
 
-1. Walks up the DOM from `event.target` using `closest("A")` logic to find the nearest ancestor anchor.
+1. Walks up the DOM from `event.target` by traversing `parentElement` until it finds an element whose `tagName` is `"A"` (equivalent to a `closest("A")` walk, but implemented manually for broader compatibility).
 2. Checks the same interception conditions as `use:link` (same-origin, no modifier keys, `target` is `""` or `"_self"`, `event.defaultPrevented` is `false`).
 3. Additionally checks that the anchor does **not** have the `noroute` attribute.
 4. If all checks pass, calls `event.preventDefault()` and `navigate(anchor.pathname + anchor.search, options)`.

@@ -1,5 +1,5 @@
 ---
-title: "Basic Routing with svelte5-router"
+title: "Basic Routing with svelte5-router – Getting Started"
 sidebarTitle: "Basic Routing"
 description: "Learn how to set up Router, Route, and Link components to build client-side navigation with automatic route scoring in a Svelte 5 app."
 ---
@@ -80,16 +80,16 @@ Each `<Route path="...">` is evaluated against the current URL's pathname. The r
 
 ### How Scoring Works
 
-The router uses a segment-based scoring system so you never need to worry about declaration order:
+The router uses a segment-based scoring system so you never need to worry about declaration order. Every segment starts with a base of **4 points** (`SEGMENT_POINTS`), then an additional bonus or penalty is applied based on the segment type:
 
-| Segment type | Points added |
-|---|---|
-| Static segment (e.g. `/about`) | +3 per segment |
-| Dynamic segment (e.g. `/:id`) | +2 per segment |
-| Wildcard (`*`) | −1 per splat segment |
-| Root (`/`) | +1 for the root only |
+| Segment type | Calculation | Score per segment |
+|---|---|---|
+| Static (e.g. `about`) | 4 (`SEGMENT_POINTS`) + 3 (`STATIC_POINTS`) | **7** |
+| Dynamic (e.g. `:id`) | 4 (`SEGMENT_POINTS`) + 2 (`DYNAMIC_POINTS`) | **6** |
+| Root (`""`) | 4 (`SEGMENT_POINTS`) + 1 (`ROOT_POINTS`) | **5** |
+| Wildcard (`*`) | 4 (`SEGMENT_POINTS`) − 4 − 1 (`SPLAT_PENALTY`) | **−1** |
 
-This means `static > dynamic > splat > root`. A route like `/blog/:id` will always beat `/blog/*` for a URL like `/blog/42`.
+This means `static > dynamic > root > splat`. A route like `/blog/:id` will always beat `/blog/*` for a URL like `/blog/42`.
 
 ### The Default (Fallback) Route
 

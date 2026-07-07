@@ -1,5 +1,5 @@
 ---
-title: "Router Component API Reference"
+title: "svelte5-router Router Component — Full API Reference"
 sidebarTitle: "Router"
 description: "Complete API reference for the Router component — the context provider that scores routes, resolves paths, and wires together Link and Route descendants."
 ---
@@ -36,8 +36,8 @@ The `Router` component is the backbone of every svelte5-router application. It m
 
 ```typescript
 import type { Snippet } from "svelte";
-import type { RouteLocation } from "svelte5-router";
-import type { globalHistory } from "svelte5-router";
+import type { RouteLocation } from "../Route/Route";
+import { globalHistory } from "../../lib/history";
 
 type RouterProps = {
   basepath?: string;
@@ -55,7 +55,7 @@ The object returned by the `viewtransition` callback. If a `fn` field is provide
 ```typescript
 type Viewtransition = {
   /** A Svelte transition function, e.g. `fade` or `fly` from "svelte/transition". */
-  fn?: (node: HTMLElement, params: Viewtransition) => object;
+  fn?: any;
   /** Delay in milliseconds before the transition starts. */
   delay?: number;
   /** Duration of the transition in milliseconds. */
@@ -67,7 +67,7 @@ type Viewtransition = {
   /** Starting opacity (0–1) for fade-style transitions. */
   opacity?: number;
   /** Svelte easing function, e.g. `cubicIn` from "svelte/easing". */
-  easing?: (t: number) => number;
+  easing?: any;
   /** Custom CSS transition string as a function of the animation progress `t` (0–1). */
   css?: (t: number) => string;
 };

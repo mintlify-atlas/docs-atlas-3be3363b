@@ -93,7 +93,7 @@ navigate(
   }
 </script>
 
-<form onsubmit|preventDefault={onSubmit}>
+<form onsubmit={(e) => { e.preventDefault(); onSubmit(); }}>
   <!-- form fields -->
   <button type="submit">Log in</button>
 </form>

@@ -1,5 +1,5 @@
 ---
-title: "Server-Side Rendering with svelte5-router"
+title: "Server-Side Rendering with svelte5-router and SvelteKit"
 sidebarTitle: "SSR"
 description: "Pass the request URL to the Router's url prop to synchronously resolve the active route on the server and send fully-rendered HTML to the client."
 ---
@@ -22,7 +22,7 @@ In the browser, a falsy `url` (the `""` default) is silently ignored and `window
 
 ## The `url` Prop Pattern
 
-The recommended approach is to declare `url` as reactive state in your top-level component and only assign it a real value when running on the server:
+The recommended approach is to accept `url` as an optional prop in your top-level component. In the browser the prop is omitted so `url` defaults to `""` (falsy and ignored). On the server, the parent or entry point passes the real request pathname:
 
 ```svelte App.svelte
 <script>
@@ -31,10 +31,14 @@ The recommended approach is to declare `url` as reactive state in your top-level
   import About from "./routes/About.svelte";
   import Blog from "./routes/Blog.svelte";
 
-  // In the browser this stays "", which is falsy and therefore ignored.
+  interface Props {
+    url?: string;
+  }
+
+  // In the browser, url is omitted so it defaults to "" (falsy and ignored).
   // On the server, a parent component (e.g. SvelteKit's +page.svelte) passes
-  // the real request URL.
-  export let url = $state("");
+  // the real request URL as a prop.
+  let { url = "" }: Props = $props();
 </script>
 
 <Router {url}>
@@ -154,8 +158,12 @@ createServer((req, res) => {
   import Home from "./routes/Home.svelte";
   import About from "./routes/About.svelte";
 
-  // Receives the server request URL; falsy in the browser
-  export let url = $state("");
+  interface Props {
+    url?: string;
+  }
+
+  // Receives the server request URL as a prop; defaults to "" (falsy) in the browser.
+  let { url = "" }: Props = $props();
 </script>
 
 <Router {url}>

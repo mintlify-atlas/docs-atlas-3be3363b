@@ -52,12 +52,16 @@ When a `<Route>` receives an `AsyncComponent` as its `component` prop, it:
 
 ```svelte
 <!-- Simplified Route.svelte internals -->
-{#if PropComponent instanceof Promise}
+{#if PropComponent && PropComponent instanceof Function}
+  <PropComponent {...routeParams} />
+{:else if PropComponent && PropComponent instanceof Promise}
   {#await PropComponent then C}
     <C.default {...routeParams} />
   {:catch error}
     <p>{error.message}</p>
   {/await}
+{:else}
+  {@render children?.(routeParams)}
 {/if}
 ```
 

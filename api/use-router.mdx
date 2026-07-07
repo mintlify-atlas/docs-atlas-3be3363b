@@ -1,5 +1,5 @@
 ---
-title: "useRouter() — Access the Router Context"
+title: "useRouter() — Access Active Route and Router Context"
 sidebarTitle: "useRouter()"
 description: "Retrieve the nearest Router's context object, including active route state, base paths, and route registration helpers, from inside a component."
 ---
@@ -167,7 +167,7 @@ When building reusable widget components that may be placed inside a nested `<Ro
 
   const router = useRouter();
 
-  const segments = $derived(() => {
+  const segments = $derived.by(() => {
     const uri = $router?.activeRoute?.uri ?? "/";
     return uri
       .split("/")
@@ -182,7 +182,7 @@ When building reusable widget components that may be placed inside a nested `<Ro
 <nav aria-label="Breadcrumb">
   <ol>
     <li><a href="/">Home</a></li>
-    {#each segments() as { label, href }}
+    {#each segments as { label, href }}
       <li><a {href}>{label}</a></li>
     {/each}
   </ol>
