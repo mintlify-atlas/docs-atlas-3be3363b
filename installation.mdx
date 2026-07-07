@@ -1,0 +1,131 @@
+---
+title: "Adding svelte5-router: Installation and Setup Guide"
+sidebarTitle: "Installation"
+description: "Add svelte5-router to a Svelte 5 project with npm, pnpm, or yarn. Covers the peer dependency, all named exports, and TypeScript setup."
+---
+
+Installing svelte5-router takes a single command. This page walks you through adding the package with your preferred package manager, understanding the Svelte 5 peer dependency requirement, importing the components and utilities you need, and confirming that TypeScript is ready to go.
+
+## Install the Package
+
+svelte5-router is published to npm and works with npm, pnpm, or yarn. Install it as a dev dependency alongside your existing Svelte 5 project:
+
+<CodeGroup>
+
+```bash npm
+npm install -D svelte5-router
+```
+
+```bash pnpm
+pnpm add -D svelte5-router
+```
+
+```bash yarn
+yarn add -D svelte5-router
+```
+
+</CodeGroup>
+
+<Note>
+  svelte5-router requires **Svelte 5** (`svelte ^5.0.0`) as a peer dependency. It will not work with Svelte 3 or Svelte 4 projects. If you are still on an older Svelte version, consider migrating your project first using the [Svelte 5 migration guide](https://svelte.dev/docs/svelte/v5-migration-guide).
+</Note>
+
+## Peer Dependency
+
+The library declares `svelte ^5.0.0` as a peer dependency, meaning your project must already have Svelte 5 installed. This is almost always the case for any project scaffolded with Vite + `@sveltejs/vite-plugin-svelte` or SvelteKit targeting Svelte 5.
+
+If you ever see a peer dependency warning, ensure your `package.json` contains:
+
+```json package.json
+{
+  "devDependencies": {
+    "svelte": "^5.0.0"
+  }
+}
+```
+
+## Importing from svelte5-router
+
+All public exports are available from the single package entry point `svelte5-router`. You do not need to import from sub-paths:
+
+```typescript
+import {
+  // Components
+  Router,
+  Route,
+  Link,
+
+  // Svelte actions
+  link,
+  links,
+
+  // Context hooks (use inside Svelte components)
+  useHistory,
+  useLocation,
+  useRouter,
+
+  // Imperative utilities (usable anywhere)
+  navigate,
+  listen,
+
+  // Lazy-loading helper
+  dynamic,
+} from "svelte5-router";
+```
+
+A quick summary of what each export does:
+
+| Export | Type | Description |
+|---|---|---|
+| `Router` | Component | Provides routing context to all descendant `Route` and `Link` components. Must wrap your entire navigation tree. |
+| `Route` | Component | Renders its `component` prop or child content when its `path` matches the current URL. |
+| `Link` | Component | Renders an `<a>` element that navigates without a full page reload. Automatically sets `aria-current="page"` on the active link. |
+| `link` | Svelte Action | Applied with `use:link` on a plain `<a>` tag to make it router-aware. Supports `replace` and `preserveScroll` attributes. |
+| `links` | Svelte Action | Applied with `use:links` on a container element to make all descendant `<a>` tags router-aware. Individual anchors can opt out with the `noroute` attribute. |
+| `useHistory` | Hook | Returns the history object from the nearest `Router` context. Call inside a Svelte component. |
+| `useLocation` | Hook | Returns a reactive store of the current `Location` object. Call inside a Svelte component. |
+| `useRouter` | Hook | Returns the full router context including `activeRoute`, `base`, and registration helpers. |
+| `navigate` | Function | Imperatively push or replace a history entry. Equivalent to clicking a `Link`. |
+| `listen` | Function | Register a callback that fires on every route change. For use outside Svelte components — returns an unsubscribe function. |
+| `dynamic` | Function | Wraps a dynamic `import()` expression so a route component is only fetched when its path matches. |
+
+## TypeScript Setup
+
+svelte5-router ships its own TypeScript declarations in `dist/index.d.ts` — no separate `@types` package is required. As long as your project has `"compilerOptions": { "moduleResolution": "bundler" }` (or `"node16"` / `"nodenext"`) in `tsconfig.json`, imports are typed automatically.
+
+A minimal `tsconfig.json` that works well with Svelte 5 and svelte5-router:
+
+```json tsconfig.json
+{
+  "extends": "@tsconfig/svelte/tsconfig.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
+}
+```
+
+<Tip>
+  If you are using SvelteKit, TypeScript configuration is handled automatically by the framework. You can start importing from `svelte5-router` straight away without any changes to `tsconfig.json`.
+</Tip>
+
+## Verifying the Installation
+
+Once installed, create a minimal smoke-test in your `App.svelte` to confirm everything resolves correctly:
+
+```svelte App.svelte
+<script lang="ts">
+  import { Router, Route, Link } from "svelte5-router";
+</script>
+
+<Router>
+  <Link to="/">Home</Link>
+  <Route path="/"><p>Welcome home!</p></Route>
+</Router>
+```
+
+If the page renders without import errors, svelte5-router is installed and ready. Head to the [Quickstart](/quickstart) guide to build a complete multi-route application.

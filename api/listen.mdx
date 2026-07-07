@@ -1,0 +1,120 @@
+---
+title: "listen() — Subscribe to Route Changes"
+sidebarTitle: "listen()"
+description: "Subscribe to every route change — including browser back/forward — from outside a Svelte component. Returns an unsubscribe function."
+---
+
+The `listen` function lets you register a callback that fires whenever the current route changes, whether that change came from a `navigate()` call, a `<Link>` click, or the browser's back/forward buttons. It is designed for use **outside** of Svelte components — for example in plain TypeScript modules, analytics helpers, or application bootstrap code. Inside Svelte components you should prefer the `useLocation`, `useRouter`, or `useHistory` hooks, which integrate cleanly with Svelte's reactivity system and automatically clean up when the component is destroyed.
+
+## Import
+
+```typescript
+import { listen } from 'svelte5-router';
+```
+
+## Signature
+
+```typescript
+listen(
+  fn: (event: {
+    location: Location & { state: any; key: string };
+    action: 'POP' | 'PUSH';
+    preserveScroll?: boolean;
+  }) => void
+): () => void
+```
+
+## Parameters
+
+<ParamField path="fn" type="function" required>
+  A callback invoked on every route change. Receives a single event object with three properties:
+
+  - **`location`** — A snapshot of the current `window.location` extended with `state` (from `window.history.state`) and `key` (a timestamp string). Includes the standard `pathname`, `search`, `hash`, `href`, and `origin` properties.
+  - **`action`** — Either `"PUSH"` (navigate/Link triggered) or `"POP"` (browser back/forward button). See [action values](#action-values) below.
+  - **`preserveScroll`** — Forwarded from the originating `navigate()` call. `undefined` on `"POP"` actions.
+</ParamField>
+
+## Return value
+
+<ResponseField name="unsubscribe" type="() => void">
+  A zero-argument function that removes the listener and cleans up the underlying `popstate` event handler. Always call this when the listener is no longer needed to prevent memory leaks.
+</ResponseField>
+
+## Action values
+
+| Value | Triggered by | Notes |
+|---|---|---|
+| `"PUSH"` | `navigate()`, `<Link>` clicks, `use:link`, `use:links` | A new entry was added to (or replaced in) the history stack |
+| `"POP"` | Browser back / forward buttons, `history.go()` | The user moved within the existing history stack |
+
+<Note>
+  `"PUSH"` is emitted for both `pushState` **and** `replaceState` operations. There is no separate `"REPLACE"` action — if you need to distinguish them, check whether the `location.key` has changed between events.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```javascript Basic listener (README example)
+import { listen as addListener } from 'svelte5-router';
+
+function init() {
+  addListener(({ location }) => {
+    console.log(location.pathname);
+  });
+}
+```
+
+```typescript Listener with unsubscribe
+import { listen } from 'svelte5-router';
+
+const unsub = listen(({ location, action }) => {
+  console.log(`[${action}] navigated to ${location.pathname}`);
+});
+
+// Later — e.g. when tearing down a module:
+unsub();
+```
+
+```typescript Analytics integration
+import { listen } from 'svelte5-router';
+
+export function initAnalytics() {
+  const unsub = listen(({ location, action }) => {
+    if (action === 'PUSH') {
+      // Only track intentional navigations, not back/forward
+      analytics.page({ path: location.pathname });
+    }
+  });
+
+  // Return the cleanup function so the caller can unsubscribe
+  return unsub;
+}
+```
+
+```typescript Reading state on POP
+import { listen } from 'svelte5-router';
+
+listen(({ location, action }) => {
+  if (action === 'POP' && location.state?.scrollY !== undefined) {
+    window.scrollTo(0, location.state.scrollY as number);
+  }
+});
+```
+
+</CodeGroup>
+
+## Inside vs. outside components
+
+| Context | Recommended API | Reason |
+|---|---|---|
+| Outside Svelte components | `listen()` | No Svelte context available; manage lifecycle manually |
+| Inside Svelte components | `useLocation()`, `useRouter()`, `useHistory()` | Hooks integrate with Svelte's `$state` / `$derived` reactivity and auto-cleanup on destroy |
+
+<Warning>
+  If you call `listen` inside a Svelte component without calling the returned unsubscribe function in `onDestroy`, the listener will survive the component's destruction and accumulate on every remount. Use `useLocation` inside components instead.
+</Warning>
+
+<Tip>
+  The `listen` export is the `listen` method of the shared `globalHistory` singleton. Every listener registered through it hears the same events, regardless of how many `<Router>` instances are active.
+</Tip>

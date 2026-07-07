@@ -1,0 +1,141 @@
+---
+title: "navigate() — Imperative Navigation Function"
+sidebarTitle: "navigate()"
+description: "Programmatically navigate to any route in your Svelte 5 app. Supports history push/replace, scroll preservation, state, and element blur."
+---
+
+The `navigate` function lets you trigger route changes from JavaScript code — no `<Link>` component required. It is the go-to tool for redirecting users after form submissions, async operations such as authentication flows, or any logic-driven navigation that cannot be expressed declaratively. Under the hood, `navigate` is re-exported directly from the `globalHistory` singleton created by `createHistory`, so every call shares the same browser history session.
+
+## Import
+
+```typescript
+import { navigate } from 'svelte5-router';
+```
+
+## Signature
+
+```typescript
+navigate(
+  to: string,
+  options?: {
+    replace?: boolean;
+    state?: Record<string | number, unknown>;
+    preserveScroll?: boolean;
+    blurActiveElement?: boolean;
+  }
+): void
+```
+
+## Parameters
+
+<ParamField path="to" type="string" required>
+  The destination path to navigate to, e.g. `"/dashboard"` or `"/blog/42?tab=comments"`. Must be a same-origin path; the function calls `history.pushState` or `history.replaceState` internally.
+</ParamField>
+
+<ParamField path="options.replace" type="boolean" default="false">
+  When `true`, the current history entry is **replaced** instead of a new entry being pushed. The user will not be able to press the browser back button to return to the page that called `navigate`. Useful for login redirects and post-submit flows where going back would re-trigger the action.
+</ParamField>
+
+<ParamField path="options.state" type="Record<string | number, unknown>" default="{}">
+  An arbitrary serialisable object stored alongside the history entry via the Web History API. Accessible through `window.history.state` or the `useHistory` / `useLocation` hooks. A `key` property (timestamp string) is merged in automatically by the router.
+</ParamField>
+
+<ParamField path="options.preserveScroll" type="boolean" default="false">
+  When `true`, the page will **not** scroll to the top after navigation. Useful for list→detail transitions where preserving scroll position improves UX.
+</ParamField>
+
+<ParamField path="options.blurActiveElement" type="boolean" default="false">
+  When `true`, `document.activeElement.blur()` is called after navigation. Helpful for keyboard-driven UIs where focus should return to the document body after a navigation action.
+</ParamField>
+
+## Return value
+
+<ResponseField name="void">
+  `navigate` returns nothing. Side effects are the history entry change and notifications to all registered listeners.
+</ResponseField>
+
+## How it works
+
+`navigate` is the `navigate` method of `globalHistory`, a `createHistory` instance that wraps `window.history` (or a memory-based fallback in SSR / non-DOM environments). When called, it:
+
+1. Merges a timestamped `key` into `state`.
+2. Calls `window.history.pushState` or `window.history.replaceState` depending on `replace`.
+3. Updates the internal `location` snapshot.
+4. Notifies every registered listener with `{ location, action: "PUSH", preserveScroll }`.
+5. Optionally blurs the active element.
+
+<Note>
+  **iOS Safari pushState limit** — Safari on iOS caps `pushState` calls at 100 per 30-second window. svelte5-router catches the resulting `SecurityError` and falls back to `location.assign(to)` (or `location.replace(to)` when `replace` is `true`), which causes a full-page navigation but keeps the app functional.
+</Note>
+
+## push vs. replace
+
+| Scenario | `replace` value | Effect |
+|---|---|---|
+| Normal link click | `false` (default) | New entry added; back button returns to previous page |
+| Post-login redirect | `true` | Current entry replaced; back button skips the login page |
+| Wizard step navigation | `false` | Each step is a history entry; back/forward works step-by-step |
+| Error redirect | `true` | Avoids an unreachable "error" URL in history |
+
+## Examples
+
+<CodeGroup>
+
+```svelte Post-form redirect
+<script lang="ts">
+  import { navigate } from 'svelte5-router';
+
+  async function onSubmit() {
+    await login();
+    // Replace the login page in history so the user can't
+    // accidentally navigate back to the login form.
+    navigate('/success', { replace: true });
+  }
+</script>
+
+<form onsubmit|preventDefault={onSubmit}>
+  <!-- form fields -->
+  <button type="submit">Log in</button>
+</form>
+```
+
+```svelte Async operation with state
+<script lang="ts">
+  import { navigate } from 'svelte5-router';
+
+  async function handleCheckout() {
+    const order = await submitOrder();
+    navigate(`/orders/${order.id}`, {
+      state: { justPlaced: true },
+      preserveScroll: false,
+    });
+  }
+</script>
+```
+
+```svelte Programmatic back navigation
+<script lang="ts">
+  import { navigate } from 'svelte5-router';
+
+  function goHome() {
+    navigate('/');
+  }
+</script>
+
+<button onclick={goHome}>← Back to Home</button>
+```
+
+</CodeGroup>
+
+<Tip>
+  Inside Svelte components, you can also retrieve the `navigate` function from the `useHistory` hook to stay within Svelte's reactive context:
+
+  ```svelte
+  <script lang="ts">
+    import { useHistory } from 'svelte5-router';
+    const { navigate } = useHistory();
+  </script>
+  ```
+
+  Outside components (e.g. in plain TypeScript modules or service files), import `navigate` directly from `svelte5-router`.
+</Tip>

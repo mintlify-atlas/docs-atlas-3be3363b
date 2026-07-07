@@ -1,0 +1,177 @@
+---
+title: "Lazy-Loading Routes with dynamic()"
+sidebarTitle: "Lazy Loading"
+description: "Split route components into separate JS chunks using the dynamic() helper so they are only downloaded when a user navigates to that route."
+---
+
+By default, every component imported at the top of a file is bundled into the same JavaScript chunk as the module that imports it. For large applications this means the initial download includes code for pages the user may never visit. svelte5-router's `dynamic()` helper wraps a standard dynamic `import()` so the component is fetched from the server only when the matching route becomes active, keeping your initial bundle small.
+
+## How `dynamic()` Works
+
+`dynamic()` receives a `Promise` returned by a dynamic `import()` and wraps it in a loader function that the `Route` component recognises as an `AsyncComponent`. The `Route` internals use an `{#await}` block to resolve the import, render the default export, or display the error message if the import fails.
+
+```typescript
+import type { AsyncComponent } from "svelte5-router";
+
+export function dynamic(p: Promise<unknown>): AsyncComponent {
+  const loader = function loaderComponent() {
+    return p as Promise<{ default: Component<any, Record<string, unknown>> }>;
+  };
+  loader.prototype.name = "dynComponent";
+  return loader;
+}
+```
+
+The router distinguishes a lazy component from a regular one by checking `fn.prototype.name === "dynComponent"`. Regular Svelte 5 components are plain functions; the `dynamic()` wrapper sets that sentinel name so the Route knows to `await` it.
+
+## Basic Usage
+
+Call `dynamic()` once at module level — outside any reactive context — so the import promise is created only once:
+
+```svelte App.svelte
+<script>
+  import { dynamic, Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import Blog from "./routes/Blog.svelte";
+
+  // About is loaded lazily — its chunk is not in the initial bundle
+  const About = dynamic(import("./routes/About.svelte"));
+
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog">Blog</Link>
+  </nav>
+
+  <main>
+    <!-- Eagerly loaded — component prop receives a regular Svelte component -->
+    <Route path="/blog" component={Blog} />
+    <Route path="/"><Home /></Route>
+
+    <!-- Lazily loaded — component prop receives an AsyncComponent -->
+    <Route path="/about" component={About} />
+  </main>
+</Router>
+```
+
+The `About` chunk is requested from the network the first time a user navigates to `/about`. Subsequent visits reuse the already-cached module.
+
+## TypeScript: The `AsyncComponent` Type
+
+`dynamic()` returns an `AsyncComponent`, which is exported from `svelte5-router` for use in typed component props:
+
+```typescript
+import type { AsyncComponent } from "svelte5-router";
+
+// Storing a lazy component in a variable
+const About: AsyncComponent = dynamic(import("./routes/About.svelte"));
+
+// Passing a lazy component as a prop
+interface Props {
+  lazyPage: AsyncComponent;
+}
+```
+
+## How Route Renders an AsyncComponent
+
+Inside `Route.svelte`, the component type is detected and handled with an `{#await}` block:
+
+```svelte
+{#if $activeRoute && $activeRoute.route === route}
+  {#if PropComponent && PropComponent instanceof Function}
+    <!-- Regular component -->
+    <PropComponent {...routeParams} {...rest} />
+  {:else if PropComponent && PropComponent instanceof Promise}
+    <!-- Async / lazy component -->
+    {#await PropComponent then C}
+      <C.default {...routeParams} />
+    {:catch error}
+      <p>{error.message}</p>
+    {/await}
+  {:else}
+    <!-- Children snippet -->
+    {@render children?.(routeParams)}
+  {/if}
+{/if}
+```
+
+The route component:
+1. Calls the `AsyncComponent` function to get the `Promise`.
+2. Waits for the promise to resolve to a module with a `default` export.
+3. Renders `C.default` with route params spread as props.
+4. On failure, renders `<p>{error.message}</p>`.
+
+## Error Handling
+
+If the dynamic import fails (network error, missing file, etc.), the `Route` renders the error message inline. In production you'll usually want to replace this with a proper error boundary. You can do that by wrapping the route with a Svelte error boundary component or by pre-loading with `try/catch` at the application level:
+
+```svelte
+<script>
+  import { dynamic, Router, Route } from "svelte5-router";
+
+  // If the import itself throws synchronously (e.g. build-time missing module),
+  // catch it here. Network errors during navigation are handled by Route.
+  const AdminPanel = dynamic(import("./routes/AdminPanel.svelte"));
+
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <Route path="/admin" component={AdminPanel} />
+</Router>
+```
+
+<Note>
+  The component only loads when the route becomes active. If the user never navigates to `/admin`, the `AdminPanel` chunk is never downloaded.
+</Note>
+
+## Mixing Eager and Lazy Routes
+
+You can freely combine eager and lazy routes in the same `Router`. A common pattern is to load the most-visited routes eagerly and lazy-load everything else:
+
+<CodeGroup>
+```svelte App.svelte
+<script>
+  import { dynamic, Router, Link, Route } from "svelte5-router";
+
+  // Eagerly loaded — included in the initial bundle
+  import Home from "./routes/Home.svelte";
+  import Blog from "./routes/Blog.svelte";
+  import BlogPost from "./routes/BlogPost.svelte";
+
+  // Lazily loaded — fetched only when the user visits the route
+  const About = dynamic(import("./routes/About.svelte"));
+  const Settings = dynamic(import("./routes/Settings.svelte"));
+  const AdminPanel = dynamic(import("./routes/AdminPanel.svelte"));
+
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog">Blog</Link>
+    <Link to="/settings">Settings</Link>
+    <Link to="/admin">Admin</Link>
+  </nav>
+
+  <main>
+    <Route path="/blog/:id" component={BlogPost} />
+    <Route path="/blog" component={Blog} />
+    <Route path="/about" component={About} />
+    <Route path="/settings" component={Settings} />
+    <Route path="/admin" component={AdminPanel} />
+    <Route path="/"><Home /></Route>
+  </main>
+</Router>
+```
+</CodeGroup>
+
+<Tip>
+  Most bundlers (Vite, Rollup, webpack) automatically split a dynamic `import()` into a separate chunk. You can verify the split by inspecting the build output in `dist/assets/` — each lazily imported component will appear as its own `.js` file.
+</Tip>

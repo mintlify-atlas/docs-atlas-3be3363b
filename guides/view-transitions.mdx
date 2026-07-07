@@ -1,0 +1,232 @@
+---
+title: "Animated View Transitions (Experimental)"
+sidebarTitle: "View Transitions"
+description: "Add animated transitions between routes using the viewtransition prop on Router, with built-in Svelte transitions or custom CSS-based animations."
+---
+
+svelte5-router supports animated route transitions through the `viewtransition` prop on `<Router>`. When set, the router wraps its rendered content in a keyed `<div>` block that re-mounts on every pathname change, triggering an `in:` and `out:` transition. You can use any of Svelte's built-in transitions (such as `fade` from `svelte/transition`) or supply a fully custom CSS-based animation via the `css` callback.
+
+<Warning>
+  View transitions are **experimental**. The API may change in a future release. Test thoroughly before using in production, and be aware that simultaneous `in` and `out` transitions on the same DOM subtree can cause visual overlap depending on your transition timing.
+</Warning>
+
+## How It Works
+
+The `viewtransition` prop accepts a function with the signature `(direction?: string) => Viewtransition`. The router calls this function with the transition direction and passes the return value to both the `in:` and `out:` directives on the wrapper element.
+
+```typescript
+type Viewtransition = {
+  fn?: any;          // A Svelte transition function, e.g. `fade` from svelte/transition
+  delay?: number;    // Delay in milliseconds before the transition starts
+  duration?: number; // Duration of the transition in milliseconds
+  x?: number;        // Horizontal offset for slide-style transitions
+  y?: number;        // Vertical offset for slide-style transitions
+  opacity?: number;  // Starting / ending opacity (0–1)
+  easing?: any;      // A Svelte easing function, e.g. `cubicIn` from svelte/easing
+  css?: (t: number) => string; // CSS string generator receiving a progress value 0–1
+};
+```
+
+When a `fn` is provided, the router delegates to that Svelte transition function. When `fn` is omitted but `css` is provided, the router drives the transition entirely from your CSS callback.
+
+## Built-In Svelte Transitions
+
+Use any transition from `svelte/transition` by passing it as the `fn` property:
+
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import { fade } from "svelte/transition";
+  import Home from "./routes/Home.svelte";
+  import Contact from "./routes/Contact.svelte";
+
+  let url = $state("");
+</script>
+
+<Router
+  {url}
+  viewtransition={() => ({ fn: fade, duration: 500 })}
+>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/contact">Contact</Link>
+  </nav>
+
+  <main>
+    <Route path="/contact" component={Contact} />
+    <Route path="/" component={Home} />
+  </main>
+</Router>
+```
+
+When the route changes, the old content fades out while the new content fades in over 500 ms.
+
+### Other Built-In Transitions
+
+<Tabs>
+  <Tab title="fly">
+    ```svelte
+    <script>
+      import { fly } from "svelte/transition";
+    </script>
+
+    <Router
+      {url}
+      viewtransition={() => ({ fn: fly, x: 200, duration: 300 })}
+    >
+      <!-- routes -->
+    </Router>
+    ```
+  </Tab>
+  <Tab title="slide">
+    ```svelte
+    <script>
+      import { slide } from "svelte/transition";
+    </script>
+
+    <Router
+      {url}
+      viewtransition={() => ({ fn: slide, duration: 250 })}
+    >
+      <!-- routes -->
+    </Router>
+    ```
+  </Tab>
+  <Tab title="scale">
+    ```svelte
+    <script>
+      import { scale } from "svelte/transition";
+    </script>
+
+    <Router
+      {url}
+      viewtransition={() => ({ fn: scale, duration: 200, opacity: 0 })}
+    >
+      <!-- routes -->
+    </Router>
+    ```
+  </Tab>
+</Tabs>
+
+## Custom CSS Transitions
+
+Omit `fn` and supply a `css` callback instead. The callback receives `t`, a number from `0` to `1` representing the transition's progress, and must return a valid CSS string. The router applies this as inline styles to the wrapper element on each animation frame.
+
+The example below uses `cubicIn` easing for a scale-based entrance:
+
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import { cubicIn } from "svelte/easing";
+  import Home from "./routes/Home.svelte";
+  import Contact from "./routes/Contact.svelte";
+
+  let url = $state("");
+</script>
+
+<Router
+  {url}
+  viewtransition={() => ({
+    duration: 500,
+    easing: cubicIn,
+    css: (t) => `scale: ${t}; transform-origin: center center;`,
+  })}
+>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/contact">Contact</Link>
+  </nav>
+
+  <main>
+    <Route path="/contact" component={Contact} />
+    <Route path="/" component={Home} />
+  </main>
+</Router>
+```
+
+As `t` goes from `0` → `1` on entry, the content scales up from nothing to full size. On exit, `t` goes from `1` → `0` and the content shrinks away.
+
+## Direction-Aware Transitions
+
+The function passed to `viewtransition` receives an optional `direction` string (`"in"` or `"out"`). Use it to return different parameters depending on which direction the animation is running:
+
+```svelte
+<Router
+  {url}
+  viewtransition={(direction) => ({
+    fn: fly,
+    x: direction === "in" ? 100 : -100,
+    duration: 300,
+  })}
+>
+  <!-- routes -->
+</Router>
+```
+
+This creates a sliding effect where new content enters from the right and the old content exits to the left.
+
+## `Viewtransition` Type Reference
+
+| Property | Type | Description |
+|---|---|---|
+| `fn` | `any` | A Svelte transition function (e.g. `fade`, `fly`, `slide`) |
+| `delay` | `number` | Milliseconds to wait before starting the transition |
+| `duration` | `number` | Total transition duration in milliseconds |
+| `x` | `number` | Horizontal translation offset in pixels |
+| `y` | `number` | Vertical translation offset in pixels |
+| `opacity` | `number` | Target opacity at the start/end of the transition (0–1) |
+| `easing` | `any` | A Svelte easing function (e.g. `cubicIn`, `elasticOut`) |
+| `css` | `(t: number) => string` | Returns a CSS string for each frame; `t` runs 0→1 on enter, 1→0 on exit |
+
+<Tip>
+  Combine `easing` with `css` for smooth, non-linear custom animations. All standard easing functions from `svelte/easing` — `linear`, `cubicIn`, `cubicOut`, `cubicInOut`, `elasticOut`, and so on — work as-is with the `easing` field.
+</Tip>
+
+## Full Working Example
+
+<CodeGroup>
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import { fade } from "svelte/transition";
+  import { cubicIn } from "svelte/easing";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+  import Blog from "./routes/Blog.svelte";
+
+  let url = $state("");
+
+  // Switch between "fade" and "custom scale" by changing which line is active
+  const transition = () => ({ fn: fade, duration: 400 });
+  // const transition = () => ({ duration: 400, easing: cubicIn, css: (t) => `scale: ${t}; transform-origin: center center;` });
+</script>
+
+<Router {url} viewtransition={transition}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog">Blog</Link>
+  </nav>
+
+  <main>
+    <Route path="/about" component={About} />
+    <Route path="/blog" component={Blog} />
+    <Route path="/" component={Home} />
+  </main>
+</Router>
+```
+
+```svelte routes/Home.svelte
+<div>
+  <h1>Home</h1>
+  <p>Welcome home.</p>
+</div>
+```
+
+```svelte routes/About.svelte
+<div>
+  <h1>About</h1>
+  <p>Learn about us.</p>
+</div>
+```
+</CodeGroup>

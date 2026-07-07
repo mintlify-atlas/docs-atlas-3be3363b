@@ -1,0 +1,69 @@
+---
+title: "svelte5-router: Declarative Svelte 5 Routing Library"
+sidebarTitle: "Introduction"
+description: "svelte5-router is a declarative, SSR-ready Svelte 5 router forked from svelte-routing, rebuilt with runes, lazy loading, and TypeScript."
+---
+
+svelte5-router is a declarative routing library built exclusively for Svelte 5, giving you a familiar component-based API — `Router`, `Route`, and `Link` — while taking full advantage of Svelte 5's runes and reactivity model. It was forked from the well-established [svelte-routing](https://github.com/EmilTholin/svelte-routing) library and rewritten from the ground up to be compatible with Svelte 5's `$props()`, `$state()`, and `$effect()` primitives, making it the natural drop-in for any Svelte 5 project that needs client-side navigation with optional server-side rendering.
+
+## Why svelte5-router?
+
+The original svelte-routing library relied on Svelte 3/4 patterns that are incompatible with Svelte 5's runes-based architecture. svelte5-router resolves this by shipping a fully modernised codebase that uses `$props()` for all component properties and reactive stores under the hood — so navigation state stays consistent and predictable across the entire component tree. Whether you are building a simple single-page app or a full-stack SSR application, svelte5-router covers the routing layer without adding unnecessary complexity.
+
+## Key Features
+
+<CardGroup cols={3}>
+  <Card title="SSR Support" icon="server">
+    Pass a `url` prop to the top-level `Router` to force a URL during server-side rendering. No extra adapters required.
+  </Card>
+  <Card title="Lazy Loading" icon="bolt">
+    Use the `dynamic()` helper to code-split routes and only load their JavaScript and CSS bundles when the URL matches.
+  </Card>
+  <Card title="TypeScript" icon="code">
+    Ships with first-class TypeScript types for all components, hooks, actions, and utilities — no `@types` package needed.
+  </Card>
+  <Card title="Context Hooks" icon="hook">
+    Access `useLocation()`, `useRouter()`, and `useHistory()` inside any descendant component to read and react to routing state.
+  </Card>
+  <Card title="Link Actions" icon="link">
+    The `link` and `links` Svelte actions let you turn plain `<a>` tags into router-aware links without wrapping them in a component.
+  </Card>
+  <Card title="View Transitions" icon="sparkles">
+    Experimental `viewtransition` prop on `Router` lets you wire in Svelte built-in transitions or custom CSS transitions between routes.
+  </Card>
+</CardGroup>
+
+## Exports at a Glance
+
+svelte5-router exposes a focused, tree-shakeable public API:
+
+| Export | Kind | Purpose |
+|---|---|---|
+| `Router` | Component | Top-level routing context provider |
+| `Route` | Component | Renders its content when its `path` matches |
+| `Link` | Component | Accessible, router-aware anchor element |
+| `link` | Action | Make a single `<a>` tag router-aware |
+| `links` | Action | Make all `<a>` tags inside a container router-aware |
+| `useHistory` | Hook | Access the history object from context |
+| `useLocation` | Hook | Subscribe to the current location from context |
+| `useRouter` | Hook | Access the active router context |
+| `navigate` | Function | Imperatively navigate to any path |
+| `listen` | Function | Listen to route changes outside a Svelte component |
+| `dynamic` | Function | Wrap a dynamic `import()` for lazy-loaded routes |
+
+## Where to Go Next
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="package" href="/installation">
+    Add svelte5-router to your project with npm, pnpm, or yarn and configure the peer dependency.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build a working multi-page Svelte 5 app with Router, Route, and Link in under five minutes.
+  </Card>
+  <Card title="Basic Routing" icon="map" href="/guides/basic-routing">
+    Learn path parameters, wildcard routes, nested routers, and default catch-all routes.
+  </Card>
+  <Card title="Router API" icon="book" href="/api/router">
+    Full reference for every prop, hook, action, and utility exported by the library.
+  </Card>
+</CardGroup>

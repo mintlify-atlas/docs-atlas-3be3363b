@@ -1,0 +1,159 @@
+---
+title: "dynamic() — Lazy-Load Route Components"
+sidebarTitle: "dynamic()"
+description: "Wrap a dynamic import() with dynamic() to lazy-load Svelte components per route, splitting your bundle into smaller per-route JS and CSS chunks."
+---
+
+The `dynamic` function enables code-splitting at the route level. Wrap a dynamic `import()` expression with `dynamic()` and pass the result as the `component` prop on a `<Route>`. The router will defer loading the component's JavaScript and CSS until that route is first matched, producing smaller initial bundles and faster first-paint times for large applications. While the component is loading the route renders nothing; once the import resolves the component mounts; if the import rejects the route renders an error paragraph with the rejection message.
+
+## Import
+
+```typescript
+import { dynamic } from 'svelte5-router';
+```
+
+## Signature
+
+```typescript
+function dynamic(p: Promise<unknown>): AsyncComponent
+```
+
+### `AsyncComponent` type
+
+```typescript
+type AsyncComponent = () => Promise<{
+  default: Component<any, Record<string, unknown>>;
+}>;
+```
+
+`AsyncComponent` is a named function (internally called `loaderComponent`) whose prototype carries a `name` property set to `"dynComponent"`. The router uses this marker — via the `isAsync` guard — to distinguish lazy components from regular synchronous Svelte components, both of which are plain functions in Svelte 5.
+
+## Parameters
+
+<ParamField path="p" type="Promise<unknown>" required>
+  A `Promise` produced by a dynamic `import()` expression, e.g. `import('./routes/About.svelte')`. The promise must resolve to a module with a `default` export that is a Svelte component. You can pass the raw `import()` call directly — no `.then()` chaining is needed.
+</ParamField>
+
+## Return value
+
+<ResponseField name="AsyncComponent" type="() => Promise<{ default: Component }>">
+  A named loader function that, when called by the `<Route>` component, returns the original promise. The `<Route>` component awaits this promise using Svelte's `{#await}` block.
+</ResponseField>
+
+## Loading lifecycle
+
+When a `<Route>` receives an `AsyncComponent` as its `component` prop, it:
+
+1. Calls `isAsync(component)` — checks for the `"dynComponent"` prototype marker.
+2. Invokes the loader function to obtain the promise.
+3. Renders **nothing** while the promise is pending (`{#await}` pending block is empty).
+4. Renders `<C.default {...routeParams} />` once the promise resolves.
+5. Renders `<p>{error.message}</p>` if the promise rejects.
+
+```svelte
+<!-- Simplified Route.svelte internals -->
+{#if PropComponent instanceof Promise}
+  {#await PropComponent then C}
+    <C.default {...routeParams} />
+  {:catch error}
+    <p>{error.message}</p>
+  {/await}
+{/if}
+```
+
+<Note>
+  The pending state renders nothing by default. If you want a loading indicator, wrap the `<Route>` in your own `{#await}` or use a Suspense-style wrapper component around the lazy route.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```svelte Single lazy route (JSDoc example)
+<script lang="ts">
+  import { Router, Route, dynamic } from 'svelte5-router';
+
+  const AboutRoute = dynamic(import('./routes/About.svelte'));
+</script>
+
+<Router>
+  <Route path="/about" component={AboutRoute} />
+</Router>
+```
+
+```svelte Multiple lazy routes
+<script lang="ts">
+  import { Router, Route, Link, dynamic } from 'svelte5-router';
+
+  // Each call produces its own independent JS + CSS chunk
+  const Home    = dynamic(import('./routes/Home.svelte'));
+  const Blog    = dynamic(import('./routes/Blog.svelte'));
+  const Profile = dynamic(import('./routes/Profile.svelte'));
+</script>
+
+<Router>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/blog">Blog</Link>
+    <Link to="/profile">Profile</Link>
+  </nav>
+
+  <Route path="/"        component={Home} />
+  <Route path="/blog"    component={Blog} />
+  <Route path="/profile" component={Profile} />
+</Router>
+```
+
+```svelte Passing props to a lazy component
+<script lang="ts">
+  import { Router, Route, dynamic } from 'svelte5-router';
+
+  const BlogPost = dynamic(import('./routes/BlogPost.svelte'));
+</script>
+
+<Router>
+  <!--
+    Path params (e.g. id) are spread onto the component as props
+    once the import resolves, just like synchronous components.
+  -->
+  <Route path="/blog/:id" component={BlogPost} />
+</Router>
+```
+
+```svelte Mixing sync and async routes
+<script lang="ts">
+  import { Router, Route, dynamic } from 'svelte5-router';
+  // Synchronous — always in the initial bundle
+  import NotFound from './routes/NotFound.svelte';
+
+  // Asynchronous — loaded on demand
+  const Dashboard = dynamic(import('./routes/Dashboard.svelte'));
+  const Settings  = dynamic(import('./routes/Settings.svelte'));
+</script>
+
+<Router>
+  <Route path="/dashboard" component={Dashboard} />
+  <Route path="/settings"  component={Settings} />
+  <!-- Default / catch-all route is synchronous for instant feedback -->
+  <Route component={NotFound} />
+</Router>
+```
+
+</CodeGroup>
+
+## Why a named function?
+
+In Svelte 5, components are plain functions, so the router cannot distinguish `component={MyComponent}` (synchronous) from `component={dynamic(...)}` (asynchronous) by type alone. `dynamic` solves this by creating a **named** inner function and assigning `"dynComponent"` to `loader.prototype.name`. The `isAsync` guard then checks:
+
+```typescript
+function isAsync(fn: Function | undefined): fn is AsyncComponent {
+  if (!fn) return false;
+  return !!(fn.prototype && 'name' in fn.prototype && fn.prototype.name === 'dynComponent');
+}
+```
+
+This lightweight marker avoids any runtime overhead and works without needing the component to carry a special type brand.
+
+<Tip>
+  Call `dynamic(import('./Route.svelte'))` **at the module level** (outside `$state`, `$effect`, or event handlers) so that the import promise is created once and shared across all renders. Creating the promise inside a reactive block would restart the import on every re-evaluation.
+</Tip>

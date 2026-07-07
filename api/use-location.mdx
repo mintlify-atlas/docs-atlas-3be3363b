@@ -1,0 +1,157 @@
+---
+title: "useLocation() — Reactive Current Location Hook"
+sidebarTitle: "useLocation()"
+description: "Access a reactive Svelte store of the current route location—pathname, search, hash, and history state—from inside any component."
+---
+
+`useLocation()` returns a Svelte readable store that always reflects the currently matched URL. Whenever the user navigates—whether through a `<Link>`, the `navigate()` function, or the browser's own back/forward controls—the store updates automatically and any component subscribed to it re-renders. Because it relies on Svelte's `getContext`, it **must** be called at the top level of a Svelte component's `<script>` block, not inside a plain `.ts` module or an event handler.
+
+## Signature
+
+```typescript
+import { useLocation } from "svelte5-router";
+
+const location = useLocation();
+// location is a Readable<RouteLocation>
+```
+
+## Return value
+
+`useLocation()` returns a `Readable<RouteLocation>` store. Subscribe with Svelte's `$` auto-subscription syntax or `.subscribe()`.
+
+### RouteLocation
+
+<ResponseField name="RouteLocation" type="object">
+  The shape of the value held in the returned store.
+
+  <Expandable title="RouteLocation fields">
+    <ResponseField name="pathname" type="string" required>
+      The path portion of the URL, e.g. `/blog/hello-world`. This never includes the query string or hash fragment.
+    </ResponseField>
+
+    <ResponseField name="search" type="string" required>
+      The raw query string, including the leading `?`, e.g. `?page=2&sort=asc`. Empty string `""` when there is no query string.
+    </ResponseField>
+
+    <ResponseField name="hash" type="string">
+      The URL hash fragment, including the leading `#`, e.g. `#section-2`. `undefined` when there is no hash.
+    </ResponseField>
+
+    <ResponseField name="state" type="Record<string | number, unknown>" required>
+      Arbitrary state object pushed to the history stack by `navigate()` or the `<Link state={...}>` prop. Defaults to `{}` when no state was set.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+### Reading pathname and search
+
+The most common use case is rendering different UI depending on the current path or reacting to query-parameter changes without a full navigation.
+
+```svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+</script>
+
+<p>You are on: {$location.pathname}</p>
+{#if $location.hash}
+  <p>Anchor: {$location.hash}</p>
+{/if}
+```
+
+### Parsing query parameters
+
+`$location.search` is a raw string like `?q=svelte&page=3`. Use the browser's `URLSearchParams` API to parse individual values.
+
+```svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+
+  // Reactively derive a parsed params object
+  const params = $derived(new URLSearchParams($location.search));
+  const query = $derived(params.get("q") ?? "");
+  const page  = $derived(Number(params.get("page") ?? "1"));
+</script>
+
+<h1>Search results for "{query}" — page {page}</h1>
+```
+
+### Accessing history state
+
+State values pushed with `navigate("/path", { state: { from: "home" } })` or `<Link state={{ from: "home" }}>` are available on `$location.state`.
+
+```svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+  const from = $derived($location.state["from"] as string | undefined);
+</script>
+
+{#if from}
+  <p>Redirected from: {from}</p>
+{/if}
+```
+
+### Full page component example
+
+<CodeGroup>
+
+```svelte SearchPage.svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+
+  const searchParams = $derived(new URLSearchParams($location.search));
+  const query = $derived(searchParams.get("q") ?? "");
+</script>
+
+<main>
+  <h1>Results for "{query}"</h1>
+  <p>Current path: {$location.pathname}</p>
+</main>
+```
+
+```svelte ActiveLink.svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+
+  let { href, children }: { href: string; children: any } = $props();
+  const isActive = $derived($location.pathname === href);
+</script>
+
+<a {href} class:active={isActive}>
+  {@render children()}
+</a>
+```
+
+</CodeGroup>
+
+## Constraints
+
+<Warning>
+  `useLocation()` uses Svelte's `getContext()` under the hood and **must be called during component initialisation**, i.e. at the top level of a `<script>` block inside a `.svelte` file. Calling it inside a function, a `$effect`, or outside a component will throw a Svelte context error.
+</Warning>
+
+## Relationship with `listen()`
+
+`useLocation()` is the in-component counterpart of the top-level `listen()` export. Use `useLocation()` inside Svelte components for reactive, auto-cleaned-up subscriptions. Use `listen()` in plain TypeScript/JavaScript modules—such as analytics initialization—where Svelte context is not available.
+
+```typescript
+// Works outside a Svelte component
+import { listen } from "svelte5-router";
+
+const unlisten = listen(({ location }) => {
+  console.log("Navigated to", location.pathname);
+});
+
+// Call unlisten() when no longer needed
+```

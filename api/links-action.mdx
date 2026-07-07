@@ -1,0 +1,129 @@
+---
+title: "links — Svelte Action for Bulk Anchor Navigation"
+sidebarTitle: "links action"
+description: "Apply use:links to a container element to intercept all relative anchor clicks inside it via event delegation, with per-anchor opt-out via noroute."
+---
+
+The `links` Svelte action is the bulk alternative to `use:link`. Instead of decorating every individual anchor, you apply `use:links` once to a parent element and it captures all relative anchor clicks inside that subtree through event delegation. This is ideal for application shells, CMS-rendered HTML, or any layout where individual anchors are dynamic and cannot easily be decorated one by one.
+
+## Import
+
+```typescript
+import { links } from 'svelte5-router';
+```
+
+## Usage
+
+```svelte
+<div use:links>
+  <!-- all relative <a> elements inside are automatically intercepted -->
+</div>
+```
+
+## Supported anchor attributes
+
+Each individual `<a>` element inside the container can carry these attributes to customise its navigation behaviour:
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `replace` | boolean (presence) | `false` | Passes `replace: true` to `navigate`, replacing the current history entry |
+| `preserveScroll` | boolean (presence) | `false` | Passes `preserveScroll: true` to `navigate`, keeping the current scroll position |
+| `noroute` | boolean (presence) | `false` | **Opts this anchor out** of the action entirely. The click is not intercepted and the browser handles it natively |
+
+## How it works
+
+The action attaches a single `click` listener to the container. On each click it:
+
+1. Walks up the DOM from `event.target` using `closest("A")` logic to find the nearest ancestor anchor.
+2. Checks the same interception conditions as `use:link` (same-origin, no modifier keys, `target` is `""` or `"_self"`, `event.defaultPrevented` is `false`).
+3. Additionally checks that the anchor does **not** have the `noroute` attribute.
+4. If all checks pass, calls `event.preventDefault()` and `navigate(anchor.pathname + anchor.search, options)`.
+
+<Note>
+  Because the action uses event delegation, anchors added to the container **after** the initial render are still intercepted automatically — no re-mounting or re-applying the action is required.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```svelte Application shell (README example)
+<!-- App.svelte -->
+<script lang="ts">
+  import { links, Router, Route } from 'svelte5-router';
+  import Home from './routes/Home.svelte';
+  import About from './routes/About.svelte';
+</script>
+
+<div use:links>
+  <Router>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/replace" replace>Replace this URL</a>
+      <a href="/native" noroute>Use the native action</a>
+    </nav>
+    <Route path="/" component={Home} />
+    <Route path="/about" component={About} />
+  </Router>
+</div>
+```
+
+```svelte CMS-rendered HTML block
+<script lang="ts">
+  import { links } from 'svelte5-router';
+
+  // content may contain <a href="/blog/42"> links from a CMS
+  let { content }: { content: string } = $props();
+</script>
+
+<!-- All relative links in CMS content are automatically routed -->
+<article use:links>
+  {@html content}
+</article>
+```
+
+```svelte Dynamic list with opt-out
+<script lang="ts">
+  import { links } from 'svelte5-router';
+
+  const items = [
+    { href: '/posts/1', label: 'Post 1', external: false },
+    { href: 'https://example.com', label: 'External', external: true },
+    { href: '/downloads/file.pdf', label: 'Download PDF', native: true },
+  ];
+</script>
+
+<ul use:links>
+  {#each items as item}
+    <li>
+      {#if item.native}
+        <!-- noroute lets the browser download the file natively -->
+        <a href={item.href} noroute>{item.label}</a>
+      {:else}
+        <a href={item.href}>{item.label}</a>
+      {/if}
+    </li>
+  {/each}
+</ul>
+```
+
+</CodeGroup>
+
+## `links` vs. `link` — which to use?
+
+| Concern | `use:link` (on `<a>`) | `use:links` (on container) |
+|---|---|---|
+| **Attachment point** | Individual `<a>` tag | Parent / wrapper element |
+| **Event listeners** | One per anchor | One per container (event delegation) |
+| **Dynamic anchors** | Must apply `use:link` to each new anchor | Automatically covered |
+| **Opt-out** | N/A — remove `use:link` | Add `noroute` attribute to the anchor |
+| **Best for** | A handful of known, static links | Navigation sections, CMS content, generated link lists |
+
+<Tip>
+  Place `use:links` on the outermost element of your layout — often the `<div>` or `<main>` wrapping your `<Router>` — so that every relative anchor in the entire app is handled without any per-link decoration.
+</Tip>
+
+<Warning>
+  Avoid nesting multiple `use:links` containers. Because the action listens at the container level, a click on an anchor inside an inner container will bubble up and be handled twice (once by each container's listener), resulting in `navigate` being called twice for the same click.
+</Warning>

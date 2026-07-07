@@ -1,0 +1,117 @@
+---
+title: "link — Svelte Action for Anchor Navigation"
+sidebarTitle: "link action"
+description: "Apply use:link to any <a> tag to intercept clicks and push them through svelte5-router's history, with replace and preserveScroll support."
+---
+
+The `link` Svelte action turns an ordinary `<a>` element into a client-side navigation trigger. Add `use:link` to any anchor inside your `<Router>` and the router will intercept eligible clicks, call `navigate()` internally, and update the history stack without a full-page reload. Per-anchor HTML attributes (`replace`, `preserveScroll`) let you customise each link's behaviour without importing additional helpers.
+
+## Import
+
+```typescript
+import { link } from 'svelte5-router';
+```
+
+## Usage
+
+```svelte
+<a href="/path" use:link>Label</a>
+```
+
+## Supported attributes
+
+The action reads the following HTML attributes directly from the `<a>` element at click time:
+
+| Attribute | Type | Default | Description |
+|---|---|---|---|
+| `replace` | boolean (presence) | `false` | Calls `navigate` with `replace: true`, replacing the current history entry instead of adding a new one |
+| `preserveScroll` | boolean (presence) | `false` | Calls `navigate` with `preserveScroll: true`, preventing the page from scrolling to the top after navigation |
+
+These are plain HTML boolean attributes — add them without a value to enable, omit them to disable:
+
+```svelte
+<!-- push (default) -->
+<a href="/about" use:link>About</a>
+
+<!-- replace -->
+<a href="/login" use:link replace>Log in</a>
+
+<!-- preserve scroll position -->
+<a href="/feed" use:link preserveScroll>Feed</a>
+```
+
+## Interception conditions
+
+The action only intercepts a click when **all** of the following are true:
+
+1. `anchor.target` is `""` (empty string) or `"_self"` — links that open in a new tab (`target="_blank"`) are left to the browser.
+2. The anchor's host matches the current page's host (same-origin only — external links pass through untouched).
+3. No keyboard modifier key was held (`Meta`, `Alt`, `Ctrl`, `Shift`). Holding any modifier key preserves the browser's default behaviour (e.g. open in new tab on macOS with ⌘-click).
+4. `event.defaultPrevented` is `false` — if another handler already prevented the event, the action steps aside.
+
+When all conditions are met, `event.preventDefault()` is called and `navigate(anchor.pathname + anchor.search, options)` is invoked.
+
+<Note>
+  The `link` action attaches a `click` listener to the element itself. If you need to apply routing to a large block of mixed anchors, consider `use:links` on a container element instead — it uses event delegation and avoids attaching a listener per anchor.
+</Note>
+
+## Examples
+
+<CodeGroup>
+
+```svelte Basic navigation (README example)
+<script lang="ts">
+  import { Router, Route, link } from 'svelte5-router';
+  import Home from './routes/Home.svelte';
+  import About from './routes/About.svelte';
+</script>
+
+<Router>
+  <nav>
+    <a href="/" use:link>Home</a>
+    <a href="/about" use:link>About</a>
+  </nav>
+  <Route path="/" component={Home} />
+  <Route path="/about" component={About} />
+</Router>
+```
+
+```svelte replace and preserveScroll
+<script lang="ts">
+  import { Router, Route, link } from 'svelte5-router';
+</script>
+
+<Router>
+  <!-- Replaces history entry — back button will skip this URL -->
+  <a href="/replace" use:link replace>Replace this URL</a>
+
+  <!-- Navigates without scrolling to top -->
+  <a href="/section" use:link preserveScroll>Jump to section</a>
+</Router>
+```
+
+```svelte External link passes through unaffected
+<script lang="ts">
+  import { link } from 'svelte5-router';
+</script>
+
+<!--
+  External: hostMatches() returns false → browser handles normally.
+  No use:link needed, but it's safe to add — the action simply won't intercept.
+-->
+<a href="https://example.com" use:link>External</a>
+```
+
+</CodeGroup>
+
+## Must be inside a Router
+
+The `link` action calls `navigate`, which is the global `navigate` exported from `svelte5-router`. While `navigate` itself does not require a `<Router>` in scope, the route change will only be reflected in the UI if a `<Router>` ancestor exists to respond to history events. Always place `use:link` anchors within a `<Router>` tree.
+
+<Warning>
+  Do not use `use:link` on elements that are not `<a>` tags. The action casts `event.currentTarget` to `HTMLAnchorElement` to read `pathname`, `search`, `target`, and `host`. On non-anchor elements this will silently no-op because the `instanceof HTMLAnchorElement` guard fails.
+</Warning>
+
+<Tip>
+  **`link` vs. `<Link>` component** — Use `use:link` when you need to render a plain `<a>` element and want full control over its markup (e.g. within a design-system component that already outputs an `<a>`). Use the `<Link>` component when you want built-in active-state detection via its `children` snippet.
+</Tip>

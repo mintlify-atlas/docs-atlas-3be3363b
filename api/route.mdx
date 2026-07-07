@@ -1,0 +1,207 @@
+---
+title: "Route Component API Reference"
+sidebarTitle: "Route"
+description: "Complete API reference for the Route component — define path patterns, render components or snippet children, and receive typed URL parameters on match."
+---
+
+The `Route` component registers itself with the nearest ancestor `Router` when it mounts, and renders its content only when the router decides it is the best match for the current URL. A `Route` can render in three ways: pass a `component` prop to mount a Svelte component constructor or a lazily-loaded dynamic import; use the `children` snippet to render inline markup that receives resolved URL parameters; or omit both `path` and `component` to create a default fallback route that activates when no other sibling `Route` matches. Extra props beyond `path` and `component` are forwarded directly to the rendered component.
+
+## Props
+
+<ParamField path="path" type="string" default='""'>
+  The URL pattern this route matches against. Segments prefixed with `:` become named dynamic parameters (e.g. `/blog/:id` captures `id`). A bare `*` wildcard captures the remainder of the URL into a parameter named `"*"`. A named wildcard such as `*splatname` captures the remainder into `splatname`. Omitting `path` (or passing an empty string) marks this route as the **default/fallback** route — it matches only when no other `Route` in the same `Router` produces a match.
+</ParamField>
+
+<ParamField path="component" type="Component | AsyncComponent" default="null">
+  A Svelte component constructor to render when this route is active, or an `AsyncComponent` produced by the `dynamic()` helper for code-split lazy loading. When `component` is provided, all resolved URL parameters and any extra props are spread onto it. If `component` is omitted, the `children` snippet is rendered instead.
+</ParamField>
+
+<ParamField path="children" type="Snippet<[RouteParams]>">
+  A Svelte 5 snippet rendered when the route is active and no `component` prop is set. The snippet receives a single `RouteParams` argument — a record of all named URL parameters resolved from the matched path. Use the `{#snippet children(params)}` syntax to destructure and forward parameters to nested components.
+</ParamField>
+
+<ParamField path="...rest" type="Record<string, unknown>">
+  Any additional props passed to `<Route>` are collected and spread onto the rendered `component` alongside the resolved URL parameters. This lets you pass static configuration values, event handlers, or data directly from the routing layer to a page component without an intermediate wrapper.
+</ParamField>
+
+---
+
+## TypeScript Types
+
+### `RouteProps`
+
+```typescript
+import type { Component, Snippet } from "svelte";
+
+type RouteProps = {
+  path?: string;
+  component?: Component<any, Record<string, any>>;
+  children?: Snippet<[RouteParams]>;
+  /** Any additional props forwarded to the rendered component. */
+  [additionalProp: string]: unknown;
+};
+```
+
+### `RouteParams`
+
+A plain string-to-string map of all named URL parameters extracted from the matched path.
+
+```typescript
+type RouteParams = {
+  [param: string]: string;
+};
+```
+
+### `RouteLocation`
+
+Describes the current browser location, available through the `useLocation` hook and the `Router` children snippet.
+
+```typescript
+type RouteLocation = {
+  /** The path portion of the URL, e.g. "/blog/42". */
+  pathname: string;
+  /** The query string including the leading "?", e.g. "?page=2". */
+  search: string;
+  /** The hash fragment including the leading "#", e.g. "#section". */
+  hash?: string;
+  /** Arbitrary state object stored in the history entry. */
+  state: {
+    [k in string | number]: unknown;
+  };
+};
+```
+
+### `AsyncComponent`
+
+The type returned by the `dynamic()` helper. It is a zero-argument function that returns a `Promise` resolving to a module with a `default` Svelte component export.
+
+```typescript
+type AsyncComponent = () => Promise<{
+  default: Component<any, Record<string, unknown>>;
+}>;
+```
+
+---
+
+## Route Scoring
+
+`Router` automatically ranks all registered `Route` children so you never need to worry about declaration order. Each segment of a path contributes to a cumulative integer score:
+
+| Segment type | Calculation |
+|---|---|
+| Per segment present | +4 |
+| Static literal (e.g. `about`) | +3 additional |
+| Dynamic parameter (e.g. `:id`) | +2 additional |
+| Splat wildcard (`*`) | −5 net (removes the +4 and adds a −1 penalty) |
+| Root path `/` | +1 |
+| Default route (`path=""`) | Score = 0 — always last resort |
+
+The router picks the highest-scoring match. For routes with equal scores, declaration order (index) is the tiebreaker. In practice this means:
+
+- `/blog/new` (all static) beats `/blog/:id` (one dynamic segment)
+- `/blog/:id` beats `/blog/*` (splat)
+- Both beat the default `path=""` fallback
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```svelte Component prop
+<script>
+  import { Router, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+  import BlogPost from "./routes/BlogPost.svelte";
+</script>
+
+<Router>
+  <!-- Static route -->
+  <Route path="/" component={Home} />
+
+  <!-- Dynamic parameter — :id is forwarded to BlogPost as a prop -->
+  <Route path="/blog/:id" component={BlogPost} />
+
+  <!-- Fallback: renders when no other Route matches -->
+  <Route path="/about" component={About} />
+</Router>
+```
+
+```svelte Children snippet with params
+<script>
+  import { Router, Route } from "svelte5-router";
+  import BlogPost from "./components/BlogPost.svelte";
+</script>
+
+<Router>
+  <Route path="/blog/:id">
+    {#snippet children(params)}
+      <!-- params.id contains the value from the URL -->
+      <BlogPost id={params.id} />
+    {/snippet}
+  </Route>
+</Router>
+```
+
+```svelte Default / fallback route
+<script>
+  import { Router, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import NotFound from "./routes/NotFound.svelte";
+</script>
+
+<Router>
+  <Route path="/" component={Home} />
+  <!-- path="" — matches only when nothing else does -->
+  <Route component={NotFound} />
+</Router>
+```
+
+```svelte Passing extra props to a component
+<script>
+  import { Router, Route } from "svelte5-router";
+  import UserProfile from "./routes/UserProfile.svelte";
+</script>
+
+<Router>
+  <!--
+    title="My Profile" is spread onto UserProfile
+    alongside any URL params, so UserProfile receives
+    both { id } from the path and { title } from the prop.
+  -->
+  <Route path="/users/:id" component={UserProfile} title="My Profile" />
+</Router>
+```
+
+```svelte Lazy loading with dynamic()
+<script>
+  import { Router, Route, dynamic } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+
+  // The About module is only downloaded when /about is first visited.
+  const About = dynamic(import("./routes/About.svelte"));
+</script>
+
+<Router>
+  <Route path="/" component={Home} />
+  <Route path="/about" component={About} />
+</Router>
+```
+
+```svelte Splat wildcard
+<script>
+  import { Router, Route } from "svelte5-router";
+</script>
+
+<Router>
+  <!-- Matches /files/any/number/of/segments -->
+  <Route path="/files/*filePath">
+    {#snippet children(params)}
+      <p>Browsing: {params.filePath}</p>
+    {/snippet}
+  </Route>
+</Router>
+```
+
+</CodeGroup>

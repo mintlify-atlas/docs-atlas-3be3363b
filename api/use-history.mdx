@@ -1,0 +1,297 @@
+---
+title: "useHistory() — Access the History Context"
+sidebarTitle: "useHistory()"
+description: "Retrieve the history object from the nearest Router, navigate imperatively, listen to location changes, or integrate a custom history implementation."
+---
+
+`useHistory()` returns the history object that the nearest ancestor `<Router>` is using to track and drive navigation. By default this is svelte5-router's built-in `globalHistory`, which wraps the browser's `window.history` API (or a memory-based fallback during SSR). If a `<Router>` was given a custom `history` prop, `useHistory()` returns that custom instance instead—making it the correct way to perform imperative navigation inside a component when you need to respect a potentially overridden history. Like the other context hooks, it must be called during Svelte component initialisation.
+
+## Signature
+
+```typescript
+import { useHistory } from "svelte5-router";
+
+const history = useHistory();
+// history is HistoryContext (the same shape as globalHistory)
+```
+
+## Return value
+
+`useHistory()` returns a `HistoryContext` object with the following shape.
+
+### HistoryContext
+
+<ResponseField name="location" type="Location & { state: any; key: string }" required>
+  A **read-only** snapshot of the current location. This is a plain object—not a store—so it reflects the location at the moment of access. For a reactive store that updates on every navigation, use [`useLocation()`](/api/use-location) instead.
+
+  <Expandable title="location fields">
+    <ResponseField name="pathname" type="string" required>
+      The current URL path, e.g. `/settings/profile`.
+    </ResponseField>
+
+    <ResponseField name="search" type="string" required>
+      The raw query string including the leading `?`, e.g. `?tab=security`. Empty string when absent.
+    </ResponseField>
+
+    <ResponseField name="hash" type="string" required>
+      The hash fragment including the leading `#`. Empty string when absent.
+    </ResponseField>
+
+    <ResponseField name="state" type="any" required>
+      The history state object associated with the current entry, as set by `navigate()` or the browser.
+    </ResponseField>
+
+    <ResponseField name="key" type="string" required>
+      An internal key used to uniquely identify this history entry. The value `"initial"` is used for the very first entry.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="listen" type="(listener: Listener) => () => void" required>
+  Subscribes to location changes. The listener is called whenever a navigation occurs, whether triggered by `navigate()`, a `<Link>` click, or the browser's back/forward buttons.
+
+  Returns an **unsubscribe function**—call it to remove the listener and prevent memory leaks.
+
+  <Expandable title="Listener parameters">
+    <ParamField body="location" type="Location & { state: any; key: string }" required>
+      The new location after the navigation.
+    </ParamField>
+
+    <ParamField body="action" type='"POP" | "PUSH"' required>
+      `"PUSH"` for programmatic navigations via `navigate()` or `<Link>`. `"POP"` for browser back/forward button presses.
+    </ParamField>
+
+    <ParamField body="preserveScroll" type="boolean">
+      Whether the navigation requested that the scroll position be preserved. Only present on `"PUSH"` actions.
+    </ParamField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="navigate" type="(to: string, options?: NavigateOptions) => void" required>
+  Imperatively navigates to the given path. Notifies all registered listeners after the navigation.
+
+  <ParamField path="to" type="string" required>
+    The destination path to navigate to, e.g. `"/dashboard"` or `"/search?q=svelte"`.
+  </ParamField>
+
+  <ParamField path="options" type="NavigateOptions">
+    Optional configuration for the navigation.
+
+    <Expandable title="NavigateOptions fields">
+      <ParamField body="replace" type="boolean" default="false">
+        When `true`, the current history entry is replaced rather than a new one being pushed. The back button will skip over the current page.
+      </ParamField>
+
+      <ParamField body="state" type="Record<string | number, unknown>" default="{}">
+        Arbitrary data to associate with the new history entry. Accessible as `$location.state` via `useLocation()` on the destination route.
+      </ParamField>
+
+      <ParamField body="preserveScroll" type="boolean" default="false">
+        When `true`, the page will not scroll to the top after navigation. Forwarded to listeners via the `preserveScroll` field on the listener event.
+      </ParamField>
+
+      <ParamField body="blurActiveElement" type="boolean" default="false">
+        When `true`, the currently focused element will have `.blur()` called on it after navigation. Useful for dismissing mobile keyboards or removing focus rings after a form submission.
+      </ParamField>
+    </Expandable>
+  </ParamField>
+</ResponseField>
+
+## `useHistory()` vs. top-level `navigate()`
+
+The top-level `navigate()` export always uses `globalHistory`—the default browser history singleton. `useHistory()` returns whichever history object was passed to the nearest `<Router>` via its `history` prop.
+
+| | `navigate()` (top-level) | `history.navigate()` from `useHistory()` |
+|---|---|---|
+| Usable outside components | ✅ Yes | ❌ No (requires context) |
+| Respects custom `history` prop | ❌ No | ✅ Yes |
+| Good for SSR / testing | ❌ No (uses `window`) | ✅ Yes (if a memory history is injected) |
+
+```typescript
+// Top-level — always uses the global browser history
+import { navigate } from "svelte5-router";
+navigate("/dashboard");
+```
+
+```svelte
+<script lang="ts">
+  // Inside a component — uses the Router's history, which may be custom
+  import { useHistory } from "svelte5-router";
+
+  const history = useHistory();
+  // history.navigate respects any custom history passed to <Router history={...}>
+</script>
+```
+
+## Examples
+
+### Imperative navigation after a form submission
+
+The most common use case for `useHistory()` is redirecting programmatically after an async operation such as a form submission or authentication flow.
+
+```svelte
+<script lang="ts">
+  import { useHistory } from "svelte5-router";
+
+  const history = useHistory();
+
+  let email = $state("");
+  let password = $state("");
+  let error = $state<string | null>(null);
+
+  async function handleSubmit(e: SubmitEvent) {
+    e.preventDefault();
+    error = null;
+    try {
+      await login(email, password);
+      history.navigate("/dashboard", {
+        replace: true,
+        state: { from: "login" },
+      });
+    } catch (err) {
+      error = (err as Error).message;
+    }
+  }
+</script>
+
+<form onsubmit={handleSubmit}>
+  <label>
+    Email
+    <input type="email" bind:value={email} />
+  </label>
+  <label>
+    Password
+    <input type="password" bind:value={password} />
+  </label>
+  {#if error}
+    <p class="error">{error}</p>
+  {/if}
+  <button type="submit">Log in</button>
+</form>
+```
+
+### Listening to navigation events from within a component
+
+```svelte
+<script lang="ts">
+  import { onDestroy } from "svelte";
+  import { useHistory } from "svelte5-router";
+
+  const history = useHistory();
+
+  // listen() returns an unsubscribe function — clean up on component destroy
+  const unlisten = history.listen(({ location, action }) => {
+    console.log(`[${action}] navigated to ${location.pathname}`);
+  });
+
+  onDestroy(unlisten);
+</script>
+```
+
+<Tip>
+  Always store the return value of `history.listen()` and call it inside `onDestroy` to avoid memory leaks when the component is unmounted.
+</Tip>
+
+### Navigating without scrolling to the top
+
+```svelte
+<script lang="ts">
+  import { useHistory } from "svelte5-router";
+
+  const history = useHistory();
+
+  function loadNextPage(page: number) {
+    history.navigate(`/results?page=${page}`, { preserveScroll: true });
+  }
+</script>
+
+<button onclick={() => loadNextPage(3)}>Page 3</button>
+```
+
+### Complete form component example
+
+<CodeGroup>
+
+```svelte RegistrationForm.svelte
+<script lang="ts">
+  import { useHistory } from "svelte5-router";
+
+  const history = useHistory();
+
+  let name = $state("");
+  let email = $state("");
+  let submitting = $state(false);
+  let serverError = $state<string | null>(null);
+
+  async function register(e: SubmitEvent) {
+    e.preventDefault();
+    submitting = true;
+    serverError = null;
+
+    try {
+      await api.register({ name, email });
+
+      // Replace so the back button skips the form
+      history.navigate("/welcome", {
+        replace: true,
+        state: { registeredEmail: email },
+        blurActiveElement: true,
+      });
+    } catch (err) {
+      serverError = (err as Error).message;
+    } finally {
+      submitting = false;
+    }
+  }
+</script>
+
+<form onsubmit={register}>
+  <label>
+    Name
+    <input type="text" bind:value={name} required />
+  </label>
+  <label>
+    Email
+    <input type="email" bind:value={email} required />
+  </label>
+
+  {#if serverError}
+    <p role="alert" class="error">{serverError}</p>
+  {/if}
+
+  <button type="submit" disabled={submitting}>
+    {submitting ? "Registering…" : "Create account"}
+  </button>
+</form>
+```
+
+```svelte WelcomePage.svelte
+<script lang="ts">
+  import { useLocation } from "svelte5-router";
+
+  const location = useLocation();
+  const email = $derived(
+    ($location.state["registeredEmail"] as string | undefined) ?? "there"
+  );
+</script>
+
+<h1>Welcome, {email}!</h1>
+<p>Your account has been created.</p>
+```
+
+</CodeGroup>
+
+## Constraints
+
+<Warning>
+  `useHistory()` uses Svelte's `getContext()` and **must be called during component initialisation**, at the top level of a `<script>` block inside a `.svelte` file. It cannot be used in plain `.ts` files or inside callbacks and effects.
+</Warning>
+
+<Note>
+  For navigation outside Svelte components—such as in utility modules or service files—use the top-level `navigate()` export instead.
+
+  ```typescript
+  import { navigate } from "svelte5-router";
+  navigate("/login");
+  ```
+</Note>

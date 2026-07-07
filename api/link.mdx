@@ -1,0 +1,257 @@
+---
+title: "Link Component API Reference"
+sidebarTitle: "Link"
+description: "A client-side anchor with active-state detection, history push or replace, scroll preservation, and full HTML anchor attribute forwarding."
+---
+
+The `Link` component renders a standard HTML `<a>` element that performs client-side navigation without a full page reload. It resolves the `to` destination relative to the nearest `Router` base URI, listens for clicks, and calls the router's `navigate` function instead of following the browser's default anchor behaviour. `Link` automatically detects whether the rendered `href` matches the current pathname and sets `aria-current="page"` for accessibility. Because `Link` extends `HTMLAnchorAttributes`, every standard anchor attribute (`class`, `id`, `data-*`, etc.) is accepted and forwarded to the underlying `<a>` element.
+
+## Props
+
+<ParamField path="to" type="string" required default="#">
+  The destination URL. Absolute paths (starting with `/`) are used as-is. Relative paths are resolved against the nearest `Router` base URI using the same directory-style resolution that `cd` uses on a filesystem — every path is treated as a directory, never a file. If `to` is omitted entirely the link defaults to `"#"`.
+</ParamField>
+
+<ParamField path="replace" type="boolean" default="false">
+  When `true`, clicking the link calls `history.replaceState` instead of `history.pushState`, so the current URL is overwritten rather than a new entry being added. The router also implicitly replaces instead of pushing when the destination matches the current pathname, preventing duplicate history entries.
+</ParamField>
+
+<ParamField path="state" type="object" default="{}">
+  An arbitrary serialisable object attached to the new history entry. Retrieve it later via `useLocation()` as `location.state`. Useful for passing ephemeral data between routes without exposing it in the URL.
+</ParamField>
+
+<ParamField path="preserveScroll" type="boolean" default="false">
+  When `true`, the router will not call `window.scrollTo(0, 0)` after navigating to the linked route. Use this for in-page navigation (tabs, modals, anchor-linked sections) where restoring the scroll position to the top would be disorienting.
+</ParamField>
+
+<ParamField path="click" type="(e: MouseEvent) => void">
+  An optional click-event handler called before the router's own click logic. The handler receives the native `MouseEvent`. If you call `event.preventDefault()` inside this handler, the router will still inspect `defaultPrevented` and skip navigation accordingly.
+</ParamField>
+
+<ParamField path="children" type="Snippet<[boolean]>" required>
+  Content rendered inside the `<a>` element. The snippet receives a single boolean argument — `true` when the link's `href` exactly matches the current pathname (`isCurrent`), `false` otherwise. Use this to conditionally apply active styles or swap child components.
+</ParamField>
+
+<ParamField path="getProps" type="(params: GetPropsParams) => Record<string, any>" default="() => ({})">
+  <Note>
+    **Deprecated.** This prop is no longer applied to the rendered anchor element. The implementation still accepts the prop to avoid breaking existing code, but the returned object is currently ignored. Use the `children` active-state boolean or standard HTML attributes instead.
+  </Note>
+  A callback that previously returned extra attributes to spread onto the `<a>` element. It received a `GetPropsParams` object with `location`, `href`, `isPartiallyCurrent`, and `isCurrent` fields.
+</ParamField>
+
+<ParamField path="...HTMLAnchorAttributes" type="HTMLAnchorAttributes">
+  All remaining props are spread directly onto the underlying `<a>` element via Svelte's rest-props mechanism. This includes `class`, `id`, `style`, `target`, `rel`, `data-*` attributes, and any other valid HTML anchor attribute — except `href`, which is always computed from `to`.
+</ParamField>
+
+---
+
+## TypeScript Types
+
+### `LinkProps`
+
+```typescript
+import type { Snippet } from "svelte";
+import type { HTMLAnchorAttributes } from "svelte/elements";
+import type { RouteLocation } from "svelte5-router";
+
+type LinkProps = {
+  /** Content snippet; receives `true` when this link is the active route. */
+  children: Snippet<[boolean]>;
+  /** Destination URL. */
+  to: string;
+  /** Replace history entry instead of pushing. Default: false. */
+  replace?: boolean;
+  /** Prevent scroll-to-top on navigation. Default: false. */
+  preserveScroll?: boolean;
+  /** State object pushed to the history entry. Default: {}. */
+  state?: {
+    [k in string | number]: unknown;
+  };
+  /** @deprecated No longer applied to the anchor element. */
+  getProps?: (linkParams: GetPropsParams) => Record<string, any>;
+  /** Click event handler called before router navigation logic. */
+  click?: (e: MouseEvent) => void;
+} & Omit<HTMLAnchorAttributes, "href" | "children">;
+```
+
+### `GetPropsParams`
+
+Passed to the deprecated `getProps` callback. Documented here for completeness.
+
+```typescript
+type GetPropsParams = {
+  /** The current browser location. */
+  location: RouteLocation;
+  /** The fully resolved href of this Link. */
+  href: string;
+  /** True when the current pathname starts with href. */
+  isPartiallyCurrent: boolean;
+  /** True when the current pathname equals href exactly. */
+  isCurrent: boolean;
+};
+```
+
+---
+
+## `aria-current` Behaviour
+
+`Link` sets `aria-current="page"` on the rendered `<a>` element whenever the resolved `href` exactly equals `location.pathname`. When the link is not current the attribute is omitted entirely (set to `undefined`). This keeps the DOM clean and works correctly with screen readers and CSS attribute selectors:
+
+```css
+/* Style the active link with a CSS attribute selector */
+a[aria-current="page"] {
+  font-weight: bold;
+  text-decoration: underline;
+}
+```
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```svelte Basic navigation
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+</script>
+
+<Router>
+  <nav>
+    <Link to="/">
+      {#snippet children()}
+        Home
+      {/snippet}
+    </Link>
+    <Link to="/about">
+      {#snippet children()}
+        About
+      {/snippet}
+    </Link>
+  </nav>
+
+  <Route path="/" component={Home} />
+  <Route path="/about" component={About} />
+</Router>
+```
+
+```svelte Active-state styling with snippet
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Blog from "./routes/Blog.svelte";
+</script>
+
+<Router>
+  <nav>
+    <Link to="/blog">
+      {#snippet children(active)}
+        <!--
+          The `active` boolean is true when /blog exactly
+          matches the current pathname.
+        -->
+        <span class:active>Blog</span>
+      {/snippet}
+    </Link>
+  </nav>
+
+  <Route path="/blog" component={Blog} />
+</Router>
+```
+
+```svelte Active-state with a custom component
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import MenuItem from "./components/MenuItem.svelte";
+  import Browser from "./routes/Browser.svelte";
+</script>
+
+<Router>
+  <nav>
+    <Link to="/browser">
+      {#snippet children(active)}
+        <MenuItem {active}>Browser</MenuItem>
+      {/snippet}
+    </Link>
+  </nav>
+
+  <Route path="/browser" component={Browser} />
+</Router>
+```
+
+```svelte Replace history entry
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Step2 from "./routes/Step2.svelte";
+</script>
+
+<Router>
+  <!--
+    Navigating to /step-2 replaces the current history entry
+    so the user cannot go "back" to this step.
+  -->
+  <Link to="/step-2" replace>
+    {#snippet children()}Continue{/snippet}
+  </Link>
+
+  <Route path="/step-2" component={Step2} />
+</Router>
+```
+
+```svelte Preserve scroll position
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Gallery from "./routes/Gallery.svelte";
+</script>
+
+<Router>
+  <!--
+    Clicking this link will not scroll the page back to the top,
+    preserving the user's position in a long list.
+  -->
+  <Link to="/gallery?page=2" preserveScroll>
+    {#snippet children()}Load more{/snippet}
+  </Link>
+
+  <Route path="/gallery" component={Gallery} />
+</Router>
+```
+
+```svelte Passing history state
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Profile from "./routes/Profile.svelte";
+</script>
+
+<Router>
+  <Link to="/profile" state={{ referrer: "dashboard" }}>
+    {#snippet children()}My Profile{/snippet}
+  </Link>
+
+  <!-- Profile can read location.state.referrer via useLocation() -->
+  <Route path="/profile" component={Profile} />
+</Router>
+```
+
+```svelte With standard HTML anchor attributes
+<script>
+  import { Router, Link } from "svelte5-router";
+</script>
+
+<Router>
+  <!-- class, id, data-* and other anchor attrs are all forwarded -->
+  <Link
+    to="/docs"
+    class="nav-link"
+    id="docs-link"
+    data-testid="docs-nav"
+  >
+    {#snippet children(active)}
+      <span class:font-bold={active}>Docs</span>
+    {/snippet}
+  </Link>
+</Router>
+```
+
+</CodeGroup>

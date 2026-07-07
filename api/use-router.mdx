@@ -1,0 +1,226 @@
+---
+title: "useRouter() — Access the Router Context"
+sidebarTitle: "useRouter()"
+description: "Retrieve the nearest Router's context object, including active route state, base paths, and route registration helpers, from inside a component."
+---
+
+`useRouter()` returns the `RouterContext` object provided by the nearest ancestor `<Router>` component. It exposes reactive stores that track which route is currently active, what base path the router is mounted on, and the derived base for child routers. It also provides the `registerRoute` and `unregisterRoute` functions that `<Route>` uses to announce itself to the router—most application code will never need to call these directly. Like all context hooks, `useRouter()` must be called during Svelte component initialisation.
+
+## Signature
+
+```typescript
+import { useRouter } from "svelte5-router";
+
+const router = useRouter();
+// router is RouterContext | undefined (undefined when no parent Router exists)
+```
+
+<Note>
+  If there is no ancestor `<Router>` in the component tree, `useRouter()` returns `undefined`. Always guard against this when building reusable components that might be rendered outside a `<Router>`.
+</Note>
+
+## Return value
+
+`useRouter()` returns a `RouterContext` object (or `undefined` when called outside a router tree).
+
+### RouterContext
+
+<ResponseField name="activeRoute" type="Readable<ActiveRoute>">
+  A Svelte readable store that holds information about the route the router has selected as the best match. Updated on every navigation.
+
+  <Expandable title="ActiveRoute fields">
+    <ResponseField name="params" type="Record<string, string>" required>
+      Dynamic path segments captured from the matched route, e.g. `{ id: "42" }` for a route with path `/posts/:id`.
+    </ResponseField>
+
+    <ResponseField name="preserveScroll" type="boolean" required>
+      Whether the navigation that triggered this route change requested that the scroll position be preserved. Mirrors the `preserveScroll` option from `navigate()` or the `<Link>` prop.
+    </ResponseField>
+
+    <ResponseField name="route" type="RouteConfig" required>
+      The internal route configuration object for the matched route.
+
+      <Expandable title="RouteConfig fields">
+        <ResponseField name="path" type="string" required>
+          The resolved path pattern used for matching, e.g. `/blog/:id`.
+        </ResponseField>
+
+        <ResponseField name="_path" type="string">
+          The original path as declared on the `<Route>` component, before any base-path prefix is applied.
+        </ResponseField>
+
+        <ResponseField name="default" type="boolean" required>
+          `true` when this route was declared without a `path` prop and acts as the catch-all fallback.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="uri" type="string" required>
+      The fully resolved URI that matched the active route, e.g. `/blog/42`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="base" type="Readable<{ path: string; uri: string }>">
+  A readable store representing the base that this router was initialised with. For a top-level router this is the `basepath` prop value (default `"/"`). For nested routers it inherits from the parent router's `routerBase`.
+
+  <Expandable title="base fields">
+    <ResponseField name="path" type="string" required>
+      The path pattern of the base, used when resolving relative `<Route path>` values.
+    </ResponseField>
+
+    <ResponseField name="uri" type="string" required>
+      The concrete URI prefix of the base.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="routerBase" type="Readable<{ path: string; uri: string }>">
+  A derived readable store that reflects the effective base for child routers. It equals `base` when no route is active; once a route is matched it is derived from that route's path and URI so that nested `<Router>` components resolve paths correctly.
+
+  <Expandable title="routerBase fields">
+    <ResponseField name="path" type="string" required>
+      Effective path prefix for child route resolution.
+    </ResponseField>
+
+    <ResponseField name="uri" type="string" required>
+      Effective URI prefix for child route resolution.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="registerRoute" type="(route: Omit<RouteConfig, 'default'>) => void">
+  Registers a route configuration with the parent router so it can be scored and matched against the current location. Called automatically by `<Route>` on mount.
+
+  <Warning>
+    This function is part of the internal contract between `<Route>` and `<Router>`. Calling it directly from application code can corrupt the router's route list and produce unpredictable matching behaviour.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="unregisterRoute" type="(route: RouteConfig) => void">
+  Removes a previously registered route from the parent router. Called automatically by `<Route>` on destroy.
+
+  <Warning>
+    Like `registerRoute`, this is intended for internal use by `<Route>`. Avoid calling it from application code.
+  </Warning>
+</ResponseField>
+
+## Examples
+
+### Reading the active route URI
+
+Use `$router.activeRoute` to read information about what is currently displayed. This is useful for analytics, breadcrumbs, or conditionally rendering UI based on which route is active.
+
+```svelte
+<script lang="ts">
+  import { useRouter } from "svelte5-router";
+
+  const router = useRouter();
+</script>
+
+{#if router}
+  <p>Active URI: {$router.activeRoute?.uri ?? "none"}</p>
+  <p>Base path: {$router.base.path}</p>
+{/if}
+```
+
+### Reading path parameters from the active route
+
+```svelte
+<script lang="ts">
+  import { useRouter } from "svelte5-router";
+
+  const router = useRouter();
+  const params = $derived($router?.activeRoute?.params ?? {});
+</script>
+
+{#if params.id}
+  <p>Viewing item #{params.id}</p>
+{/if}
+```
+
+### Checking the base path in a nested context
+
+When building reusable widget components that may be placed inside a nested `<Router>`, you can inspect the current base to construct correct links.
+
+```svelte
+<script lang="ts">
+  import { useRouter } from "svelte5-router";
+
+  const router = useRouter();
+  const basePath = $derived($router?.base?.path ?? "/");
+</script>
+
+<nav>
+  <a href="{basePath}/settings">Settings</a>
+  <a href="{basePath}/profile">Profile</a>
+</nav>
+```
+
+### Full example — breadcrumb component
+
+<CodeGroup>
+
+```svelte Breadcrumb.svelte
+<script lang="ts">
+  import { useRouter } from "svelte5-router";
+
+  const router = useRouter();
+
+  const segments = $derived(() => {
+    const uri = $router?.activeRoute?.uri ?? "/";
+    return uri
+      .split("/")
+      .filter(Boolean)
+      .map((seg, i, arr) => ({
+        label: seg,
+        href: "/" + arr.slice(0, i + 1).join("/"),
+      }));
+  });
+</script>
+
+<nav aria-label="Breadcrumb">
+  <ol>
+    <li><a href="/">Home</a></li>
+    {#each segments() as { label, href }}
+      <li><a {href}>{label}</a></li>
+    {/each}
+  </ol>
+</nav>
+```
+
+```svelte RouteDebugger.svelte
+<script lang="ts">
+  import { useRouter } from "svelte5-router";
+
+  const router = useRouter();
+</script>
+
+{#if router}
+  <details>
+    <summary>Router debug</summary>
+    <dl>
+      <dt>Active URI</dt>
+      <dd>{$router.activeRoute?.uri ?? "—"}</dd>
+      <dt>Base path</dt>
+      <dd>{$router.base.path}</dd>
+      <dt>Router base path</dt>
+      <dd>{$router.routerBase.path}</dd>
+      <dt>Params</dt>
+      <dd>{JSON.stringify($router.activeRoute?.params ?? {})}</dd>
+    </dl>
+  </details>
+{/if}
+```
+
+</CodeGroup>
+
+## Constraints
+
+<Warning>
+  `useRouter()` uses Svelte's `getContext()` and **must be called during component initialisation**, at the top level of a `<script>` block. Calling it inside a callback, `$effect`, or outside a `.svelte` file will not work.
+</Warning>
+
+<Tip>
+  When building reusable components that may be used both inside and outside a `<Router>`, always check that the returned value is not `undefined` before accessing its properties.
+</Tip>

@@ -1,0 +1,222 @@
+---
+title: "Composing Apps with Nested Routers"
+sidebarTitle: "Nested Routers"
+description: "Nest Router components to build modular sub-apps, scope routes under a basepath, and host your Svelte app at a URL sub-path like /my-site."
+---
+
+svelte5-router supports nesting `<Router>` components inside one another, which lets you break a large application into self-contained sub-apps with their own route trees. Each nested router inherits the `routerBase` of its parent so relative paths resolve correctly, and the `basepath` prop lets you scope an entire sub-tree under a URL prefix — useful when your app is deployed at a path other than the root.
+
+## Why Nest Routers?
+
+<CardGroup cols={2}>
+  <Card title="Modular sub-apps" icon="puzzle-piece">
+    Each feature area (admin panel, user dashboard, docs) can own its router and route list without touching the top-level config.
+  </Card>
+  <Card title="Sub-path hosting" icon="folder-open">
+    If your app lives at `https://example.com/my-site`, set `basepath="/my-site"` on the root Router and all links and routes resolve correctly.
+  </Card>
+  <Card title="Seamless context merging" icon="layer-group">
+    Nested routers read the parent's `routerBase` through Svelte context, so they always know their effective base path without any manual wiring.
+  </Card>
+  <Card title="Independent matching" icon="route">
+    Each router scores and picks its own best-matching route independently, so inner routers don't interfere with outer ones.
+  </Card>
+</CardGroup>
+
+## The `basepath` Prop
+
+Setting `basepath` on a `<Router>` prepends that prefix to every `<Route path>` and `<Link to>` value that is a descendant of that router. The default value is `"/"`.
+
+```svelte
+<!-- All routes and links inside this Router are prefixed with /my-site -->
+<Router basepath="/my-site">
+  <Link to="/about">About</Link>    <!-- resolves to /my-site/about -->
+  <Route path="/about" component={About} />
+</Router>
+```
+
+## The `routerBase` Derived Store
+
+Internally, each `Router` maintains a `routerBase` derived store that tracks the currently matched path and URI. When a `Router` is nested, it reads the `routerBase` of its parent from Svelte context and uses it as its own base. This means nested routers always stay in sync with their parent's active route without any extra configuration.
+
+You can access this store in your own code using the `useRouter` context hook:
+
+```svelte
+<script>
+  import { useRouter } from "svelte5-router";
+
+  const { routerBase } = useRouter();
+  // $routerBase.path — the current matched path prefix
+  // $routerBase.uri  — the current resolved URI prefix
+</script>
+```
+
+## Nesting Routers: Step by Step
+
+<Steps>
+  <Step title="Create a top-level Router">
+    The root router handles your app's main routes. Nest sub-apps as route children.
+
+    ```svelte App.svelte
+    <script>
+      import { Router, Link, Route } from "svelte5-router";
+      import Home from "./routes/Home.svelte";
+      import AdminApp from "./admin/AdminApp.svelte";
+
+      let url = $state("");
+    </script>
+
+    <Router {url}>
+      <nav>
+        <Link to="/">Home</Link>
+        <Link to="/admin">Admin</Link>
+      </nav>
+
+      <main>
+        <Route path="/" component={Home} />
+        <!-- The admin sub-app handles all /admin/* routes -->
+        <Route path="/admin/*" component={AdminApp} />
+      </main>
+    </Router>
+    ```
+  </Step>
+
+  <Step title="Create the nested Router">
+    Inside `AdminApp`, declare a second `Router` with `basepath="/admin"`. Its routes are relative to that base.
+
+    ```svelte admin/AdminApp.svelte
+    <script>
+      import { Router, Link, Route } from "svelte5-router";
+      import AdminDashboard from "./AdminDashboard.svelte";
+      import AdminUsers from "./AdminUsers.svelte";
+      import AdminSettings from "./AdminSettings.svelte";
+    </script>
+
+    <Router basepath="/admin">
+      <nav>
+        <Link to="/admin">Dashboard</Link>
+        <Link to="/admin/users">Users</Link>
+        <Link to="/admin/settings">Settings</Link>
+      </nav>
+
+      <section>
+        <Route path="/admin/users" component={AdminUsers} />
+        <Route path="/admin/settings" component={AdminSettings} />
+        <!-- Default route for /admin -->
+        <Route path="/admin" component={AdminDashboard} />
+      </section>
+    </Router>
+    ```
+  </Step>
+</Steps>
+
+## Complete Example: Parent at `/app`, Nested at `/app/admin`
+
+The following example shows a parent router serving `/app/*` routes and a nested router scoped to `/app/admin/*`.
+
+<CodeGroup>
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import AppHome from "./routes/AppHome.svelte";
+  import AdminArea from "./admin/AdminArea.svelte";
+
+  let url = $state("");
+</script>
+
+<Router basepath="/app" {url}>
+  <nav>
+    <Link to="/app">App Home</Link>
+    <Link to="/app/admin">Admin</Link>
+  </nav>
+
+  <main>
+    <Route path="/app/admin/*" component={AdminArea} />
+    <Route path="/app" component={AppHome} />
+  </main>
+</Router>
+```
+
+```svelte admin/AdminArea.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import AdminDashboard from "./AdminDashboard.svelte";
+  import AdminUsers from "./AdminUsers.svelte";
+</script>
+
+<!--
+  This nested Router inherits the parent's routerBase
+  and scopes its own routes under /app/admin.
+-->
+<Router basepath="/app/admin">
+  <nav>
+    <Link to="/app/admin">Dashboard</Link>
+    <Link to="/app/admin/users">Users</Link>
+  </nav>
+
+  <section>
+    <Route path="/app/admin/users" component={AdminUsers} />
+    <Route path="/app/admin" component={AdminDashboard} />
+  </section>
+</Router>
+```
+
+```svelte admin/AdminDashboard.svelte
+<div>
+  <h1>Admin Dashboard</h1>
+  <p>Welcome to the admin area.</p>
+</div>
+```
+
+```svelte admin/AdminUsers.svelte
+<div>
+  <h1>Manage Users</h1>
+  <p>User management tools here.</p>
+</div>
+```
+</CodeGroup>
+
+## Hosting at a Sub-Path
+
+If your application is deployed at `https://example.com/my-site` instead of the root, set `basepath` on the topmost router:
+
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+
+  let url = $state("");
+</script>
+
+<!-- basepath tells the router that all paths start with /my-site -->
+<Router basepath="/my-site" {url}>
+  <nav>
+    <Link to="/my-site">Home</Link>
+    <Link to="/my-site/about">About</Link>
+  </nav>
+
+  <main>
+    <Route path="/my-site/about" component={About} />
+    <Route path="/my-site" component={Home} />
+  </main>
+</Router>
+```
+
+<Note>
+  The `basepath` value is prepended to paths exactly as written. Make sure it matches the path prefix configured in your server or static file host. There is no trailing-slash normalisation, so `/my-site` and `/my-site/` behave differently.
+</Note>
+
+## Tips
+
+<Accordion title="Do I need to repeat the basepath in every Route path?">
+  Yes. Each `<Route path>` value should be the full absolute path including the basepath prefix. The router does not strip the basepath automatically at runtime — it prepends the base to the path you give so they both point to the same URL.
+</Accordion>
+
+<Accordion title="Can I nest more than two levels deep?">
+  Yes. Routers can be nested to any depth. Each level inherits the `routerBase` of its parent, so paths always compose correctly as long as you keep them absolute.
+</Accordion>
+
+<Accordion title="Can the nested router use a different history source?">
+  Each `Router` accepts an optional `history` prop. If you omit it, the nested router uses `globalHistory` just like the parent. Passing a custom history (e.g. a memory source) lets you isolate the sub-app's navigation — useful for testing.
+</Accordion>

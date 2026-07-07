@@ -1,0 +1,224 @@
+---
+title: "Dynamic Route Parameters and Wildcards"
+sidebarTitle: "Dynamic Routes"
+description: "Use named parameters and wildcard segments to capture URL variables and pass them as props or via the Route children snippet in svelte5-router."
+---
+
+Dynamic routes let you define a single `<Route>` that matches a family of URLs by using named parameters and wildcard segments. svelte5-router extracts the captured values from the URL and makes them available as component props or through the Route's children snippet — no manual URL parsing required.
+
+## Named Parameters
+
+A path segment prefixed with `:` defines a named parameter. When the route matches, the router extracts the value of that segment and passes it to the rendered component.
+
+### Accessing Params as Component Props
+
+When you use the `component` prop on `<Route>`, all matched parameters are spread directly onto the component as props:
+
+```svelte App.svelte
+<script>
+  import { Router, Route } from "svelte5-router";
+  import BlogPost from "./routes/BlogPost.svelte";
+</script>
+
+<Router {url}>
+  <!-- The matched `id` value is passed as a prop to BlogPost -->
+  <Route path="/blog/:id" component={BlogPost} />
+</Router>
+```
+
+```svelte routes/BlogPost.svelte
+<script lang="ts">
+  interface Props {
+    id: string;
+  }
+
+  let { id }: Props = $props();
+</script>
+
+<article>
+  <h1>Blog Post #{id}</h1>
+</article>
+```
+
+<Note>
+  All route parameters arrive as strings. If you need a number, parse it with `parseInt(id, 10)` or `Number(id)`.
+</Note>
+
+### Accessing Params via the Children Snippet
+
+For cases where you want to compose the route's content inline, use the `children` snippet. The snippet receives a `params` object whose keys match the parameter names defined in the path.
+
+```svelte
+<Route path="/blog/:id">
+  {#snippet children(params)}
+    <BlogPost id={params.id} />
+  {/snippet}
+</Route>
+```
+
+This approach is handy when you need to thread params into multiple child components or transform them before passing them along.
+
+### Passing Extra Props Through Route
+
+Any prop on `<Route>` that is not `path` or `component` is forwarded to the rendered component. Combine this with named parameters to mix static and dynamic data:
+
+```svelte
+<Route path="/blog/:id" component={BlogPost} showComments={true} />
+```
+
+Inside `BlogPost`, both `id` (from the URL) and `showComments` (the static prop) will be available via `$props()`.
+
+## Multiple Parameters
+
+You can include several named parameters in a single path. Each is extracted independently:
+
+```svelte
+<script>
+  import { Router, Route } from "svelte5-router";
+  import UserProfile from "./routes/UserProfile.svelte";
+</script>
+
+<Router {url}>
+  <Route path="/users/:userId/posts/:postId" component={UserProfile} />
+</Router>
+```
+
+```svelte routes/UserProfile.svelte
+<script lang="ts">
+  interface Props {
+    userId: string;
+    postId: string;
+  }
+
+  let { userId, postId }: Props = $props();
+</script>
+
+<h1>User {userId} — Post {postId}</h1>
+```
+
+## Wildcard Segments
+
+A bare `*` at the end of a path matches everything after that point. The captured tail is passed as the `*` prop (or under a custom name if you use `*wildcardName`).
+
+### Anonymous Wildcard
+
+```svelte
+<Router {url}>
+  <!-- Matches /files/, /files/images, /files/documents/report.pdf, etc. -->
+  <Route path="/files/*" component={FileBrowser} />
+</Router>
+```
+
+```svelte routes/FileBrowser.svelte
+<script lang="ts">
+  interface Props {
+    "*": string; // the captured tail
+  }
+
+  let { "*": splat }: Props = $props();
+</script>
+
+<p>Browsing: /{splat}</p>
+```
+
+### Named Wildcard
+
+Give the wildcard a name by writing `*wildcardName`. The captured value is passed under that name instead of `*`, which is easier to destructure:
+
+```svelte
+<Router {url}>
+  <!-- Captured tail is available as `splatname` -->
+  <Route path="/files/*splatname" component={FileBrowser} />
+</Router>
+```
+
+```svelte routes/FileBrowser.svelte
+<script lang="ts">
+  interface Props {
+    splatname: string;
+  }
+
+  let { splatname }: Props = $props();
+</script>
+
+<p>Browsing: /{splatname}</p>
+```
+
+### Wildcard with Children Snippet
+
+```svelte
+<Route path="/files/*splatname">
+  {#snippet children(params)}
+    <FileBrowser path={params.splatname} />
+  {/snippet}
+</Route>
+```
+
+## Route Scoring Summary
+
+svelte5-router scores routes automatically so declaration order does not matter. Given the routes below:
+
+```svelte
+<Route path="/blog/:id" component={BlogPost} />  <!-- score: higher (dynamic) -->
+<Route path="/blog/new" component={NewPost} />   <!-- score: highest (static) -->
+<Route path="/blog/*" component={BlogFallback} /> <!-- score: lower (splat)   -->
+```
+
+Visiting `/blog/new` renders `NewPost`, visiting `/blog/42` renders `BlogPost`, and visiting `/blog/tag/svelte` renders `BlogFallback` — all without any ordering concerns.
+
+<Tip>
+  Wildcards must appear at the end of a path. Paths like `/files/*/preview` are not supported; use `/files/*splatname` and parse the suffix yourself.
+</Tip>
+
+## Complete Blog Example
+
+<CodeGroup>
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Blog from "./routes/Blog.svelte";
+  import BlogPost from "./routes/BlogPost.svelte";
+
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/blog">Blog</Link>
+  </nav>
+
+  <main>
+    <Route path="/blog/:id" component={BlogPost} />
+    <Route path="/blog" component={Blog} />
+  </main>
+</Router>
+```
+
+```svelte routes/Blog.svelte
+<script lang="ts">
+  import { Link } from "svelte5-router";
+</script>
+
+<div>
+  <h1>Blog</h1>
+  <Link to="/blog/1">Post 1</Link>
+  <Link to="/blog/2">Post 2</Link>
+  <Link to="/blog/3">Post 3</Link>
+</div>
+```
+
+```svelte routes/BlogPost.svelte
+<script lang="ts">
+  interface Props {
+    id: string;
+  }
+
+  let { id }: Props = $props();
+</script>
+
+<article>
+  <h1>Blog Post #{id}</h1>
+  <p>Content for post {id}.</p>
+</article>
+```
+</CodeGroup>

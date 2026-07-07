@@ -1,0 +1,205 @@
+---
+title: "Router Component API Reference"
+sidebarTitle: "Router"
+description: "Complete API reference for the Router component — the context provider that scores routes, resolves paths, and wires together Link and Route descendants."
+---
+
+The `Router` component is the backbone of every svelte5-router application. It must wrap all `Link` and `Route` descendants, because it exposes routing context (current location, active route, history) through Svelte's context API. At mount time, `Router` collects every child `Route`, assigns each a numeric score based on its path pattern, and reactively picks the highest-scoring match whenever the URL changes. Routers can be freely nested: a child `Router` inherits the matched URI of the nearest ancestor `Router` as its own base, enabling seamless composition of independently-developed sub-applications.
+
+## Props
+
+<ParamField path="basepath" type="string" default="/">
+  A prefix prepended to every descendant `Route` `path` and `Link` `to` value. Use this when your application is mounted at a sub-path, such as `https://example.com/my-site` — in that case set `basepath="/my-site"`. In most applications this prop can be omitted.
+</ParamField>
+
+<ParamField path="url" type="string" default='""'>
+  Forces the current URL during server-side rendering (SSR). The `Router` uses this string as the pathname instead of reading `window.location`. A falsy value (empty string, `undefined`) is silently ignored in the browser, so you can safely declare `let url = $state("")` in your top-level component and only populate it on the server.
+</ParamField>
+
+<ParamField path="viewtransition" type="(direction?: string) => Viewtransition" default="null">
+  An experimental callback that enables animated route transitions powered by Svelte's built-in `transition:` directive. When provided, the active route content is wrapped in a keyed `<div>` that applies the returned `Viewtransition` object as both an `in:` and `out:` transition on every pathname change. See the [`Viewtransition` type](#viewtransition-type) below for the full set of configurable fields.
+</ParamField>
+
+<ParamField path="history" type="object" default="globalHistory">
+  A custom history source that replaces the default browser history implementation. The object must expose the same interface as `globalHistory` (a `location` property, a `listen` method, and a `navigate` method). Pass a custom history when writing tests or when embedding the router in environments without a real browser history.
+</ParamField>
+
+<ParamField path="children" type="Snippet<[string | null, RouteLocation]>" required>
+  The content of the router — all `Route` and `Link` components should live inside this snippet. The snippet receives two arguments: the URI of the currently active route (`string | null`) and the current `RouteLocation` object.
+</ParamField>
+
+---
+
+## TypeScript Types
+
+### `RouterProps`
+
+```typescript
+import type { Snippet } from "svelte";
+import type { RouteLocation } from "svelte5-router";
+import type { globalHistory } from "svelte5-router";
+
+type RouterProps = {
+  basepath?: string;
+  url?: string;
+  viewtransition?: (direction?: string) => Viewtransition;
+  history?: typeof globalHistory;
+  children: Snippet<[string | null, RouteLocation]>;
+};
+```
+
+### `Viewtransition` type
+
+The object returned by the `viewtransition` callback. If a `fn` field is provided, it is invoked as a Svelte transition function. Otherwise the remaining fields are passed directly to Svelte's `fly`-style transition engine.
+
+```typescript
+type Viewtransition = {
+  /** A Svelte transition function, e.g. `fade` or `fly` from "svelte/transition". */
+  fn?: (node: HTMLElement, params: Viewtransition) => object;
+  /** Delay in milliseconds before the transition starts. */
+  delay?: number;
+  /** Duration of the transition in milliseconds. */
+  duration?: number;
+  /** Horizontal offset (px) for fly-style transitions. */
+  x?: number;
+  /** Vertical offset (px) for fly-style transitions. */
+  y?: number;
+  /** Starting opacity (0–1) for fade-style transitions. */
+  opacity?: number;
+  /** Svelte easing function, e.g. `cubicIn` from "svelte/easing". */
+  easing?: (t: number) => number;
+  /** Custom CSS transition string as a function of the animation progress `t` (0–1). */
+  css?: (t: number) => string;
+};
+```
+
+---
+
+## Route Scoring
+
+When the URL changes, `Router` calls `pick()` against all registered child `Route` components. Each route receives a numeric score calculated segment-by-segment:
+
+| Segment type | Points added |
+|---|---|
+| Any segment present | +4 |
+| Static segment (e.g. `about`) | +3 |
+| Dynamic parameter (e.g. `:id`) | +2 |
+| Splat wildcard (`*`) | −5 (4 + 1 penalty) |
+| Root `/` | +1 |
+| Default route (`path=""`) | 0 |
+
+Routes are sorted highest-to-lowest score, and the first match wins. Because scoring is automatic you do **not** need to order `<Route>` components manually — `<Route path="/blog/:id" />` will always beat `<Route path="/blog" />` regardless of the order they appear in the template.
+
+---
+
+## Nested Routers
+
+When a `Router` renders inside another `Router`, it reads the parent's `routerBase` from context and uses it as its own base. The child router's `basepath` prop is combined with the matched URI of the active route in the parent, so all descendant `Link` and `Route` components resolve paths relative to that combined base. This allows you to compose self-contained sub-applications without duplicating path prefixes.
+
+---
+
+## Examples
+
+<CodeGroup>
+
+```svelte Basic usage
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+  import Blog from "./routes/Blog.svelte";
+  import BlogPost from "./routes/BlogPost.svelte";
+</script>
+
+<Router>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog">Blog</Link>
+  </nav>
+
+  <Route path="/blog/:id" component={BlogPost} />
+  <Route path="/blog" component={Blog} />
+  <Route path="/about" component={About} />
+  <Route path="/"><Home /></Route>
+</Router>
+```
+
+```svelte With basepath
+<!-- Hosted at https://example.com/my-site -->
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+</script>
+
+<Router basepath="/my-site">
+  <nav>
+    <!-- Resolves to /my-site/ and /my-site/about -->
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+  </nav>
+
+  <Route path="/" component={Home} />
+  <Route path="/about" component={About} />
+</Router>
+```
+
+```svelte With SSR url
+<!-- App.svelte — works in both browser and SSR -->
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+
+  // On the server, populate `url` with the request path.
+  // In the browser, $state("") is falsy and is ignored.
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <Link to="/">Home</Link>
+  <Route path="/" component={Home} />
+</Router>
+```
+
+```svelte With viewtransition (built-in)
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import { fade } from "svelte/transition";
+  import Home from "./routes/Home.svelte";
+  import Contact from "./routes/Contact.svelte";
+</script>
+
+<Router viewtransition={() => ({ fn: fade, duration: 300 })}>
+  <Link to="/">Home</Link>
+  <Link to="/contact">Contact</Link>
+
+  <Route path="/" component={Home} />
+  <Route path="/contact" component={Contact} />
+</Router>
+```
+
+```svelte With viewtransition (custom CSS)
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import { cubicIn } from "svelte/easing";
+  import Home from "./routes/Home.svelte";
+  import Contact from "./routes/Contact.svelte";
+</script>
+
+<Router
+  viewtransition={() => ({
+    duration: 400,
+    easing: cubicIn,
+    css: (t) => `transform: scale(${t}); transform-origin: center center;`,
+  })}
+>
+  <Link to="/">Home</Link>
+  <Link to="/contact">Contact</Link>
+
+  <Route path="/" component={Home} />
+  <Route path="/contact" component={Contact} />
+</Router>
+```
+
+</CodeGroup>

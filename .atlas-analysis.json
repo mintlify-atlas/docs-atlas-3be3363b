@@ -1,0 +1,94 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "svelte5-router",
+  "projectDescription": "A declarative client-side routing library for Svelte 5 with SSR support, built on top of svelte-routing.",
+  "theme": "luma",
+  "primaryColor": "#07baf0",
+  "lightColor": "#5fc9de",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "installation", "quickstart"]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/basic-routing",
+              "guides/dynamic-routes",
+              "guides/nested-routers",
+              "guides/lazy-loading",
+              "guides/ssr",
+              "guides/view-transitions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Components",
+            "pages": [
+              "api/router",
+              "api/route",
+              "api/link"
+            ]
+          },
+          {
+            "group": "Functions & Actions",
+            "pages": [
+              "api/navigate",
+              "api/listen",
+              "api/link-action",
+              "api/links-action",
+              "api/dynamic"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/use-location",
+              "api/use-router",
+              "api/use-history"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Declarative routing with Router, Route, and Link components",
+    "SSR (Server-Side Rendering) support via the url prop",
+    "Dynamic/lazy-loaded routes with the dynamic() helper",
+    "Imperative navigation with navigate()",
+    "Location change listener via listen()",
+    "Svelte actions (link, links) for anchor-based navigation",
+    "Named URL parameters and wildcard segments",
+    "Nested routers with automatic basepath merging",
+    "View transitions (experimental) with built-in or custom transitions",
+    "Context hooks: useLocation, useRouter, useHistory",
+    "preserveScroll support to prevent scroll-to-top on navigation",
+    "Full TypeScript support"
+  ],
+  "publicApiSurface": [
+    "Router (component) — basepath, url, viewtransition props",
+    "Route (component) — path, component, children props",
+    "Link (component) — to, replace, state, preserveScroll props",
+    "navigate(to, options) — imperative navigation function",
+    "listen(fn) — subscribe to location changes",
+    "link (Svelte action) — use:link on <a> tags",
+    "links (Svelte action) — use:links on container elements",
+    "dynamic(import()) — lazy-load route components",
+    "useLocation() — context hook for current location store",
+    "useRouter() — context hook for router context",
+    "useHistory() — context hook for history object",
+    "createHistory(source) — create a custom history instance",
+    "createMemorySource(initialPathname) — in-memory history source",
+    "globalHistory — shared history instance"
+  ]
+}

@@ -1,0 +1,190 @@
+---
+title: "Server-Side Rendering with svelte5-router"
+sidebarTitle: "SSR"
+description: "Pass the request URL to the Router's url prop to synchronously resolve the active route on the server and send fully-rendered HTML to the client."
+---
+
+svelte5-router is designed to work in server-side rendering (SSR) environments such as SvelteKit or a custom Node.js server. The key is the `url` prop on `<Router>`: when it receives a truthy string, the router ignores `window.location` and uses that string as the current pathname instead, allowing routes to be matched synchronously during server rendering before any DOM exists.
+
+## How SSR Routing Works
+
+On the server, there is no `window` or browser history. svelte5-router detects this with `typeof window === "undefined"` and switches to a synchronous registration path:
+
+1. Each `<Route>` registers itself immediately when the component initialises (no `onMount`).
+2. As soon as a route is registered that matches `url`, the router sets `hasActiveRoute = true` and ignores all subsequent registrations.
+3. The rendered HTML contains only the markup for the matching route, ready to hydrate on the client.
+
+In the browser, a falsy `url` (the `""` default) is silently ignored and `window.history` is used as normal.
+
+<Note>
+  SSR sets the active route synchronously via a `hasActiveRoute` flag. The first matching route wins, so the order of `<Route>` declarations can matter in SSR if two routes could match the same URL — give more specific routes a more specific path to ensure the right one fires first.
+</Note>
+
+## The `url` Prop Pattern
+
+The recommended approach is to declare `url` as reactive state in your top-level component and only assign it a real value when running on the server:
+
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+  import Blog from "./routes/Blog.svelte";
+
+  // In the browser this stays "", which is falsy and therefore ignored.
+  // On the server, a parent component (e.g. SvelteKit's +page.svelte) passes
+  // the real request URL.
+  export let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog">Blog</Link>
+  </nav>
+
+  <main>
+    <Route path="/blog" component={Blog} />
+    <Route path="/about" component={About} />
+    <Route path="/"><Home /></Route>
+  </main>
+</Router>
+```
+
+## SvelteKit Integration
+
+SvelteKit renders each page on the server before sending it to the browser. Pass the request URL from the server-side `load` function into your App component via props.
+
+<Steps>
+  <Step title="Create a layout or page component">
+    Use SvelteKit's `$page` store (or a `load` function) to obtain the current pathname and forward it to your router.
+
+    ```svelte +page.svelte
+    <script>
+      import App from "../App.svelte";
+      import { page } from "$app/stores";
+
+      // $page.url.pathname gives the server-side request path, e.g. "/about"
+    </script>
+
+    <App url={$page.url.pathname} />
+    ```
+  </Step>
+
+  <Step title="Use a load function for full control">
+    Alternatively, return the URL from a `+page.server.ts` load function and receive it as a prop:
+
+    ```typescript +page.server.ts
+    import type { PageServerLoad } from "./$types";
+
+    export const load: PageServerLoad = ({ url }) => {
+      return { url: url.pathname };
+    };
+    ```
+
+    ```svelte +page.svelte
+    <script>
+      import App from "../App.svelte";
+
+      interface Props {
+        data: { url: string };
+      }
+
+      let { data }: Props = $props();
+    </script>
+
+    <App url={data.url} />
+    ```
+  </Step>
+
+  <Step title="Mount the app on the client">
+    In your browser entry point, you do not need to pass a URL — the empty default is correct:
+
+    ```typescript main.ts
+    import App from "./App.svelte";
+    import { mount } from "svelte";
+
+    const app = mount(App, {
+      target: document.getElementById("app")!,
+      // No `url` prop needed here — the Router reads window.history
+    });
+
+    export default app;
+    ```
+  </Step>
+</Steps>
+
+## Custom Node.js Server Example
+
+If you are not using SvelteKit, you can render the app to HTML with Svelte's `render` utility and pass the request URL directly:
+
+<CodeGroup>
+```typescript server.ts
+import { render } from "svelte/server";
+import App from "./App.svelte";
+
+function handleRequest(requestUrl: string): string {
+  const { html, head } = render(App, {
+    props: { url: requestUrl },
+  });
+
+  return `<!DOCTYPE html>
+<html>
+  <head>${head}</head>
+  <body>
+    <div id="app">${html}</div>
+  </body>
+</html>`;
+}
+
+// Example with Node's built-in http module
+import { createServer } from "http";
+
+createServer((req, res) => {
+  const html = handleRequest(req.url ?? "/");
+  res.writeHead(200, { "Content-Type": "text/html" });
+  res.end(html);
+}).listen(3000);
+```
+
+```svelte App.svelte
+<script>
+  import { Router, Link, Route } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import About from "./routes/About.svelte";
+
+  // Receives the server request URL; falsy in the browser
+  export let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+  </nav>
+
+  <main>
+    <Route path="/about" component={About} />
+    <Route path="/"><Home /></Route>
+  </main>
+</Router>
+```
+</CodeGroup>
+
+## Hydration
+
+After the server sends the HTML, Svelte hydrates the page in the browser. Because `url` defaults to `""` (falsy), the Router ignores it and uses `window.location` to determine the active route. The hydrated state matches the server-rendered HTML, so no layout shift occurs.
+
+<Tip>
+  When using dynamic (lazy-loaded) routes with SSR, the route component chunk may not be available synchronously on the server. Prefer eager imports for routes that need to be server-rendered, and reserve `dynamic()` for client-only sections. See the [Lazy Loading guide](/guides/lazy-loading) for details.
+</Tip>
+
+## Router Internals: SSR vs Browser
+
+| Step | Browser | Server |
+|---|---|---|
+| Location source | `window.history` | `url` prop |
+| Route registration | `onMount` (async) | Synchronous, immediate |
+| Stops after first match? | No — all routes register | Yes — `hasActiveRoute` flag |
+| Scroll reset | Yes, via `window.scrollTo` | Skipped (`canUseDOM()` returns false) |

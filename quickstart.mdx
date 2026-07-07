@@ -1,47 +1,214 @@
 ---
-title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+title: "Svelte 5 Quickstart: Add Routing with svelte5-router"
+sidebarTitle: "Quickstart"
+description: "Build a working Svelte 5 app with svelte5-router: install the package, create route components, wire up Router and Link, and mount with Svelte 5."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
-
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+This quickstart guide walks you through everything needed to add client-side routing to a Svelte 5 application using svelte5-router — from installing the package to a running app with multiple pages, navigation links, and a dynamic URL parameter. By the end you will have a working project structure you can build on.
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
 
-    ```bash
-    npm install your-package
-    ```
-  </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
+### Install svelte5-router
 
-    ```bash
-    your-cli init
-    ```
-  </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
+Add svelte5-router to your project as a dev dependency. It requires Svelte 5 (`^5.0.0`) as a peer dependency, which any Svelte 5 project already provides.
 
-    ```bash
-    your-cli start
-    ```
-  </Step>
-</Steps>
+<CodeGroup>
+
+```bash npm
+npm install -D svelte5-router
+```
+
+```bash pnpm
+pnpm add -D svelte5-router
+```
+
+```bash yarn
+yarn add -D svelte5-router
+```
+
+</CodeGroup>
+
+### Create your route components
+
+Each page in your app is a plain Svelte component. Create a `src/routes/` directory and add three simple page components:
+
+```svelte src/routes/Home.svelte
+<h1>Home Page</h1>
+<p>Welcome to the home page.</p>
+```
+
+```svelte src/routes/About.svelte
+<h1>About Page</h1>
+<p>Learn more about us here.</p>
+```
+
+```svelte src/routes/BlogPost.svelte
+<script lang="ts">
+  // The `id` URL parameter is passed automatically as a prop
+  // when this component is used with <Route path="/blog/:id" />
+  interface Props {
+    id: string;
+  }
+  let { id }: Props = $props();
+</script>
+
+<h1>Blog Post {id}</h1>
+<p>You are reading post number {id}.</p>
+```
 
 <Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
-
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
+  Route components are ordinary Svelte components — there is nothing special to import or extend. svelte5-router passes any URL parameters defined in the `path` (like `:id`) directly as props to the `component` you specify on `Route`.
 </Tip>
+
+### Set up App.svelte with Router, Link, and Route
+
+The `Router` component provides the routing context for the entire application. Wrap your navigation and all `Route` declarations inside a single `Router`. Use `Link` components to navigate between pages and `Route` components to map URL paths to page components.
+
+```svelte src/App.svelte
+<script lang="ts">
+  import { Router, Link, Route, dynamic } from "svelte5-router";
+  import Home from "./routes/Home.svelte";
+  import BlogPost from "./routes/BlogPost.svelte";
+
+  // dynamic() enables lazy loading — About.svelte is only fetched
+  // when the /about route becomes active.
+  const About = dynamic(import("./routes/About.svelte"));
+
+  // Declare url with $state for SSR compatibility.
+  // In the browser this is an empty string and the Router ignores it.
+  let url = $state("");
+</script>
+
+<Router {url}>
+  <nav>
+    <Link to="/">Home</Link>
+    <Link to="/about">About</Link>
+    <Link to="/blog/1">Blog Post 1</Link>
+  </nav>
+
+  <main>
+    <!-- Named URL parameter :id is passed as a prop to BlogPost -->
+    <Route path="/blog/:id" component={BlogPost} />
+
+    <!-- Lazy-loaded route using dynamic() -->
+    <Route path="/about" component={About} />
+
+    <!-- Inline children syntax — no component prop needed -->
+    <Route path="/"><Home /></Route>
+  </main>
+</Router>
+```
+
+Key points about this setup:
+
+- **`Router {url}`** — the `url` prop is only used during SSR. In the browser it is an empty string and is safely ignored. See the note below for details.
+- **`Link to="..."`** — renders an `<a>` tag that updates the URL without a full page reload. The active link automatically receives `aria-current="page"`.
+- **`Route path="/blog/:id"`** — the `:id` segment is extracted and passed as the `id` prop to `BlogPost`.
+- **`Route path="/"`** — the default catch-all renders its children directly instead of a separate component.
+
+### Mount your app in main.ts
+
+Svelte 5 replaces the old `new App()` constructor with the `mount()` function. Update your entry point accordingly:
+
+```typescript src/main.ts
+import { mount } from "svelte";
+import App from "./App.svelte";
+
+const app = mount(App, {
+  target: document.getElementById("app")!,
+});
+
+export default app;
+```
+
+```javascript src/main.js
+import { mount } from "svelte";
+import App from "./App.svelte";
+
+const app = mount(App, {
+  target: document.getElementById("app"),
+});
+
+export default app;
+```
+
+<Note>
+  Svelte 5 no longer supports `new App({ target })`. If you are migrating from Svelte 4, you **must** replace the constructor call with `mount()`. The `mount()` function is imported directly from `"svelte"`, not from your app file.
+</Note>
+
+</Steps>
+
+## Complete File Structure
+
+After following the steps above, your project should look like this:
+
+```
+src/
+├── main.ts              # Entry point — calls mount()
+├── App.svelte           # Root component with Router, Link, Route
+└── routes/
+    ├── Home.svelte      # Rendered at /
+    ├── About.svelte     # Rendered at /about (lazy-loaded)
+    └── BlogPost.svelte  # Rendered at /blog/:id
+```
+
+## Using the children Snippet for URL Parameters
+
+When you need finer control over how URL parameters are consumed — for instance, to pass them to multiple child components — use the `children` snippet instead of the `component` prop:
+
+```svelte
+<Route path="/blog/:id">
+  {#snippet children(params)}
+    <BlogPost id={params.id} />
+  {/snippet}
+</Route>
+```
+
+The `params` object contains all named segments from the `path` pattern. This syntax is especially useful when a route needs to pass the same parameter to several sibling components.
+
+## Checking Active Link State
+
+The `Link` component also exposes an active state through its `children` snippet. Use it to apply custom styling to the currently active navigation item:
+
+```svelte
+<Link to="/about">
+  {#snippet children(active)}
+    <span class:active>About</span>
+  {/snippet}
+</Link>
+```
+
+`active` is `true` when the link's `to` path exactly matches the current URL pathname.
+
+## SSR: The url Prop
+
+<Note>
+  When rendering on the server (SSR), the `Router` has no access to `window.location`. You must forward the request URL to the `Router` via its `url` prop so it can resolve the correct route synchronously during the server render pass.
+
+  Declare `let url = $state("")` in your root component and populate it with the request pathname in your SSR handler:
+
+  ```svelte App.svelte
+  <script lang="ts">
+    import { Router, Route, Link } from "svelte5-router";
+
+    // In the browser this is "", which the Router ignores.
+    // On the server, pass the request URL as a prop when rendering.
+    let url = $state("");
+  </script>
+
+  <Router {url}>
+    <!-- routes -->
+  </Router>
+  ```
+
+  A falsy `url` value is safely ignored by the `Router` in browser environments, so the same component works seamlessly in both contexts.
+</Note>
+
+## Next Steps
+
+Now that you have a working app, explore the rest of the documentation to go deeper:
+
+- **[Basic Routing](/guides/basic-routing)** — nested routers, wildcard paths, default routes, and the `basepath` prop.
+- **[Lazy Loading](/guides/lazy-loading)** — code-split routes with `dynamic()` to reduce initial bundle size.
+- **[navigate()](/api/navigate)** — use `navigate()` for programmatic navigation and `listen()` for route-change callbacks.
+- **[Router API Reference](/api/router)** — complete prop and type reference for every export.
